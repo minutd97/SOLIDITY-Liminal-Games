@@ -18,7 +18,7 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: "https://arb1.arbitrum.io/rpc" //https://arb1.arbitrum.io/rpc
+        url: "https://sepolia-rollup.arbitrum.io/rpc" //https://arb1.arbitrum.io/rpc
       },
       chainId: 31337 // 0x7A69 hexadecimal
     },

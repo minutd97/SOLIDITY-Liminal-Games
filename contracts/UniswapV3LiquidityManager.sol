@@ -98,6 +98,8 @@ contract UniswapV3LiquidityManager {
                 sqrtPriceLimitX96: 0
             });
 
+        console.log("SWAP Router addr: ", swapRouter);
+
         // The call to `exactInputSingle` executes the swap.
         amountOut = ISwapRouter(swapRouter).exactInputSingle(params);
         return amountOut;

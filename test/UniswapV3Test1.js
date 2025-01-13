@@ -6,11 +6,11 @@ const { ethers } = require("hardhat");
 describe("Uniswap V3 Liquidity Manager - Local Testing", function () {
     let liquidityManager, tokenLOT;
 
-    const FACTORY = "0x1F98431c8aD98523631AE4a59f267346ea31F984"; // Uniswap V3 Factory
-    const POSITION_MANAGER = "0xC36442b4a4522E871399CD717aBDD847Ab11FE88"; // Uniswap V3 Nonfungible Position Manager
-    const SWAP_ROUTER = "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"; // Uniswap V3 Swap router
+    const FACTORY = "0x248AB79Bbb9bC29bB72f7Cd42F17e054Fc40188e"; // Uniswap V3 Factory
+    const POSITION_MANAGER = "0x6b2937Bde17889EDCf8fbD8dE31C3C2a70Bc4d65"; // Uniswap V3 Nonfungible Position Manager
+    const SWAP_ROUTER = "0x101F443B4d1b059569D643917553c771E1b9663E"; // Uniswap V3 Swap router
 
-    const WETH_ADDRESS = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"; // WETH address on Arbitrum Sepolia testnet : 0x980B62Da83eFf3D4576C647993b0c1D7faf17c73
+    const WETH_ADDRESS = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73"; // WETH address on Arbitrum Sepolia testnet : 0x980B62Da83eFf3D4576C647993b0c1D7faf17c73, main : 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1
     const WETH_ABI = [
         "function deposit() public payable",
         "function balanceOf(address account) external view returns (uint256)",
@@ -44,6 +44,9 @@ describe("Uniswap V3 Liquidity Manager - Local Testing", function () {
         console.log("Owner: ", owner.address);
 
         await wrapETH("1000", owner);
+
+        await log_TokenBalance(tokenLOT, "$LOT", owner.address, "OWNER");
+
         return { owner };
     }
 
@@ -56,17 +59,17 @@ describe("Uniswap V3 Liquidity Manager - Local Testing", function () {
 
             const amount0 = ethers.parseUnits("100", 18); // 100 WETH
             const amount1 = ethers.parseUnits("100", 18); // 100 $LOT
-            const tickLower = -60;
-            const tickUpper = 60;
+            const tickLower = -6000;
+            const tickUpper = 6000;
 
             const weth = new ethers.Contract(WETH_ADDRESS, WETH_ABI, owner);
 
             // Approve WETH and $LOT for the liquidity manager
             await weth.connect(owner).approve(liquidityManager.getAddress(), amount0);
-            console.log("Add Liquidity : approved WETH");
+            //console.log("Add Liquidity : approved WETH");
     
             await tokenLOT.connect(owner).approve(liquidityManager.getAddress(), amount1);
-            console.log("Add Liquidity : approved $LOT");
+            //console.log("Add Liquidity : approved $LOT");
 
             await liquidityManager.connect(owner).addLiquidity(
                 WETH_ADDRESS,
@@ -77,15 +80,23 @@ describe("Uniswap V3 Liquidity Manager - Local Testing", function () {
                 tickUpper,
             );
             console.log("Liquidity added successfully");
+            await log_TokenBalance(weth, "WETH", owner.address, "OWNER");
+            await log_TokenBalance(tokenLOT, "$LOT", owner.address, "OWNER");
             
-            const amountIn = ethers.parseUnits("1", 18); // 1 WETH
+            const amountIn = ethers.parseUnits("0.1", 18); // 1 WETH
 
             //Approve WETH for the for the liquidity manager
-            await weth.connect(owner).approve(liquidityManager.getAddress(), amountIn);
-            console.log("Swap : approved WETH");
+            //await weth.connect(owner).approve(liquidityManager.getAddress(), amountIn);
+            //console.log("Swap : approved WETH");
 
-            await liquidityManager.connect(owner).swapExactInputSingle(WETH_ADDRESS, tokenLOT.getAddress(), amountIn);
-            console.log("Swap executed successfully");
+            //const swapReturn = await liquidityManager.connect(owner).swapExactInputSingle(WETH_ADDRESS, tokenLOT.getAddress(), amountIn);
+            //console.log("Swap executed successfully : ", swapReturn);
+
+            tokenLOT.connect(owner).approve(liquidityManager.getAddress(), amountIn);
+            console.log("Swap : approved $LOT");
+
+            const swapReturn = await liquidityManager.connect(owner).swapExactInputSingle(tokenLOT.getAddress(), WETH_ADDRESS, amountIn);
+            console.log("Swap executed successfully : ", swapReturn);
 
             // // Approve WETH and $LOT for the liquidity manager
             // await weth.connect(owner).approve(POSITION_MANAGER, amount0);
@@ -146,9 +157,14 @@ describe("Uniswap V3 Liquidity Manager - Local Testing", function () {
             //     0, // sqrtPriceLimitX96
             // ]);
     
-            console.log("Swap executed successfully");
+            //console.log("Swap executed successfully");
         })
     })
+
+    async function log_TokenBalance(token, tokenName, userAddr, userName){
+        let tokenBalance = await token.balanceOf(userAddr);
+        console.log(`${userName} ${tokenName} BALANCE: ${ethers.formatEther(tokenBalance)}`);
+    }
 
     async function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));

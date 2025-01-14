@@ -83,20 +83,20 @@ describe("Uniswap V3 Liquidity Manager - Local Testing", function () {
             await log_TokenBalance(weth, "WETH", owner.address, "OWNER");
             await log_TokenBalance(tokenLOT, "$LOT", owner.address, "OWNER");
             
-            const amountIn = ethers.parseUnits("0.1", 18); // 1 WETH
+            const amountIn = ethers.parseUnits("1", 18); // 1 WETH
 
             //Approve WETH for the for the liquidity manager
-            //await weth.connect(owner).approve(liquidityManager.getAddress(), amountIn);
-            //console.log("Swap : approved WETH");
+            await weth.connect(owner).approve(liquidityManager.getAddress(), amountIn);
+            console.log("Swap : approved WETH");
 
-            //const swapReturn = await liquidityManager.connect(owner).swapExactInputSingle(WETH_ADDRESS, tokenLOT.getAddress(), amountIn);
-            //console.log("Swap executed successfully : ", swapReturn);
-
-            tokenLOT.connect(owner).approve(liquidityManager.getAddress(), amountIn);
-            console.log("Swap : approved $LOT");
-
-            const swapReturn = await liquidityManager.connect(owner).swapExactInputSingle(tokenLOT.getAddress(), WETH_ADDRESS, amountIn);
+            const swapReturn = await liquidityManager.connect(owner).swapExactInputSingle(WETH_ADDRESS, tokenLOT.getAddress(), amountIn);
             console.log("Swap executed successfully : ", swapReturn);
+
+            //tokenLOT.connect(owner).approve(liquidityManager.getAddress(), amountIn);
+            //console.log("Swap : approved $LOT");
+
+            //const swapReturn = await liquidityManager.connect(owner).swapExactInputSingle(tokenLOT.getAddress(), WETH_ADDRESS, amountIn);
+            //console.log("Swap executed successfully : ", swapReturn);
 
             // // Approve WETH and $LOT for the liquidity manager
             // await weth.connect(owner).approve(POSITION_MANAGER, amount0);

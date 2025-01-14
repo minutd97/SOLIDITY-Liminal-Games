@@ -11,7 +11,7 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "hardhat/console.sol";
 
 contract UniswapV3LiquidityManager {
-    using SafeERC20 for IERC20;
+    //using SafeERC20 for IERC20;
 
     address public immutable factory;
     address public immutable positionManager;
@@ -39,7 +39,21 @@ contract UniswapV3LiquidityManager {
 
         uint160 sqrtPriceX96 = 79228162514264337593543950336; // Example value for ~1:1 price
         IUniswapV3Pool(newPool).initialize(sqrtPriceX96);
+
+        checkPoolExistance(_token0, _token1);
+
         return newPool;
+    }
+
+    function checkPoolExistance(address _token0, address _token1) public view {
+        address pool = IUniswapV3Factory(factory).getPool(_token0, _token1, POOL_FEE);
+        require(pool != address(0), "Pool does not exist");
+
+        (uint160 sqrtPriceX96,,,,,,) = IUniswapV3Pool(pool).slot0();
+        require(sqrtPriceX96 != 0, "Pool not initialized");
+
+        console.log("Pool Address:", pool);
+        console.log("Pool sqrtPriceX96:", sqrtPriceX96);
     }
 
     // Add liquidity to the pool
@@ -51,6 +65,14 @@ contract UniswapV3LiquidityManager {
         int24 _tickLower,
         int24 _tickUpper
     ) external onlyOwner {
+        
+        address pool = IUniswapV3Factory(factory).getPool(_token0, _token1, POOL_FEE);
+        int24 tickSpacing = IUniswapV3Pool(pool).tickSpacing();
+        require(_tickLower % tickSpacing == 0, "tickLower not aligned");
+        require(_tickUpper % tickSpacing == 0, "tickUpper not aligned");
+        require(_tickLower < _tickUpper, "Invalid tick range");
+        console.log("Tick range and spacing are valid");
+        
         // Transfer tokens to this contract
         IERC20(_token0).transferFrom(msg.sender, address(this), _amount0);
         IERC20(_token1).transferFrom(msg.sender, address(this), _amount1);
@@ -59,7 +81,7 @@ contract UniswapV3LiquidityManager {
         IERC20(_token0).approve(positionManager, _amount0);
         IERC20(_token1).approve(positionManager, _amount1);
 
-        INonfungiblePositionManager(positionManager).mint(INonfungiblePositionManager.MintParams({
+        INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
                 token0: _token0,
                 token1: _token1,
                 fee: POOL_FEE,
@@ -71,18 +93,28 @@ contract UniswapV3LiquidityManager {
                 amount1Min: 0,
                 recipient: msg.sender,
                 deadline: block.timestamp
-            }));
+            });
+
+        console.log("Token0 balance (contract):", IERC20(_token0).balanceOf(address(this)));
+        console.log("Token1 balance (contract):", IERC20(_token1).balanceOf(address(this)));
+        console.log("Token0 allowance (contract to positionManager):", IERC20(_token0).allowance(address(this), positionManager));
+        console.log("Token1 allowance (contract to positionManager):", IERC20(_token1).allowance(address(this), positionManager));
+
+        INonfungiblePositionManager(positionManager).mint(params);
     }
 
     /// Swaps a fixed amount of _tokenIn for a maximum possible amount of _tokenOut
     function swapExactInputSingle(address _tokenIn, address _tokenOut, uint256 _amountIn) external returns (uint256 amountOut) {
         // msg.sender must approve this contract
 
+        IERC20(_tokenIn).transferFrom(msg.sender, address(this), _amountIn);
+        IERC20(_tokenIn).approve(swapRouter, _amountIn);
+
         // Transfer the specified amount of _tokenIn to this contract.
-        TransferHelper.safeTransferFrom(_tokenIn, msg.sender, address(this), _amountIn);
+        //TransferHelper.safeTransferFrom(_tokenIn, msg.sender, address(this), _amountIn);
 
         // Approve the router to spend _tokenIn.
-        TransferHelper.safeApprove(_tokenIn, address(swapRouter), _amountIn);
+        //TransferHelper.safeApprove(_tokenIn, address(swapRouter), _amountIn);
 
         // Naively set amountOutMinimum to 0. In production, use an oracle or other data source to choose a safer value for amountOutMinimum.
         // We also set the sqrtPriceLimitx96 to be 0 to ensure we swap our exact input amount.
@@ -103,28 +135,5 @@ contract UniswapV3LiquidityManager {
         // The call to `exactInputSingle` executes the swap.
         amountOut = ISwapRouter(swapRouter).exactInputSingle(params);
         return amountOut;
-    }
-
-    // Remove liquidity from the pool
-    function removeLiquidity(uint256 tokenId, uint128 liquidity) external onlyOwner {
-        INonfungiblePositionManager(positionManager).decreaseLiquidity(
-            INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: tokenId,
-                liquidity: liquidity,
-                amount0Min: 0,
-                amount1Min: 0,
-                deadline: block.timestamp
-            })
-        );
-
-        // Collect tokens
-        INonfungiblePositionManager(positionManager).collect(
-            INonfungiblePositionManager.CollectParams({
-                tokenId: tokenId,
-                recipient: msg.sender,
-                amount0Max: type(uint128).max,
-                amount1Max: type(uint128).max
-            })
-        );
     }
 }

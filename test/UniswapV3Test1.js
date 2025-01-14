@@ -59,17 +59,19 @@ describe("Uniswap V3 Liquidity Manager - Local Testing", function () {
 
             const amount0 = ethers.parseUnits("100", 18); // 100 WETH
             const amount1 = ethers.parseUnits("100", 18); // 100 $LOT
-            const tickLower = -6000;
-            const tickUpper = 6000;
+            const tickLower = -600;
+            const tickUpper = 600;
 
             const weth = new ethers.Contract(WETH_ADDRESS, WETH_ABI, owner);
 
+            await delay(3000);
+
             // Approve WETH and $LOT for the liquidity manager
             await weth.connect(owner).approve(liquidityManager.getAddress(), amount0);
-            //console.log("Add Liquidity : approved WETH");
+            console.log("Add Liquidity : approved WETH");
     
             await tokenLOT.connect(owner).approve(liquidityManager.getAddress(), amount1);
-            //console.log("Add Liquidity : approved $LOT");
+            console.log("Add Liquidity : approved $LOT");
 
             await liquidityManager.connect(owner).addLiquidity(
                 WETH_ADDRESS,
@@ -78,7 +80,8 @@ describe("Uniswap V3 Liquidity Manager - Local Testing", function () {
                 amount1,
                 tickLower,
                 tickUpper,
-            );
+            )
+
             console.log("Liquidity added successfully");
             await log_TokenBalance(weth, "WETH", owner.address, "OWNER");
             await log_TokenBalance(tokenLOT, "$LOT", owner.address, "OWNER");

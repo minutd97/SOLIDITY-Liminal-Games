@@ -6,11 +6,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract LotteryToken is ERC20, Ownable, Pausable, AccessControl {
+contract LiminalToken is ERC20, Ownable, Pausable, AccessControl {
   
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
-    constructor() ERC20("LotteryToken", "$LOT") Ownable(msg.sender) {
+    constructor() ERC20("Liminal Token", "$LIM") Ownable(msg.sender) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender); // Owner has the admin role by default
         _mint(msg.sender, 300_000 * 10 ** decimals()); // Mint initial supply to owner
     }

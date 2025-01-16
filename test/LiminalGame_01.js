@@ -8,20 +8,54 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
   let tokenLIM, linimalTreasury, kaijiNoYurei; // kaijiNoYurei = Game contract
 
   async function deployContractsFixture() {
-    const [owner, user1, user2, user3, user4] = await ethers.getSigners();
+    const [owner, user1, user2, user3, user4, user5, user6] = await ethers.getSigners();
     
     tokenLIM = await deployContract("LiminalToken");
     linimalTreasury = await deployContract("LiminalTreasury");
     kaijiNoYurei = await deployContract("KaijiNoYurei");
 
-    return { owner, user1, user2, user3, user4 };
+    return { owner, user1, user2, user3, user4, user5, user6 };
   }
 
   describe("Running test", function () {
     it("Test succeded!", async function () {
       
       this.timeout(0); 
-      const { owner, user1, user2, user3, user4 } = await loadFixture(deployContractsFixture);
+      const { owner, user1, user2, user3, user4, user5, user6 } = await loadFixture(deployContractsFixture);
+
+      const addresses = [owner.address, user1.address, user2.address, user3.address, user4.address, user5.address, user6.address];
+      const names = ["owner", "user1", "user2", "user3", "user4", "user5", "user6"];
+
+      logUserAddresses(addresses, names);
+
+      await kaijiNoYurei.connect(user1).joinGame();
+      await kaijiNoYurei.connect(user2).joinGame();
+      await kaijiNoYurei.connect(user3).joinGame();
+      await kaijiNoYurei.connect(user4).joinGame();
+      await kaijiNoYurei.connect(user5).joinGame();
+
+      // Player already joined
+      await expect(kaijiNoYurei.connect(user5).joinGame()).to.be.reverted;
+
+      // Game is full
+      await expect(kaijiNoYurei.connect(user6).joinGame()).to.be.reverted;
+
+      await kaijiNoYurei.connect(owner).startGame();
+
+      // Game already started
+      await expect(kaijiNoYurei.connect(user6).joinGame()).to.be.reverted;
+
+      await kaijiNoYurei.connect(owner).startRound();
+
+      await kaijiNoYurei.connect(user1).selectNumber(25);
+      await kaijiNoYurei.connect(user2).selectNumber(25);
+      await kaijiNoYurei.connect(user3).selectNumber(25);
+      await kaijiNoYurei.connect(user4).selectNumber(25);
+      await kaijiNoYurei.connect(user5).selectNumber(26);
+
+      await increaseTime(180);
+
+      await kaijiNoYurei.connect(owner).endRound();
 
     });
   });
@@ -32,6 +66,17 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       await deployedContract.waitForDeployment();
       console.log(contractName, "deployed to:", deployedContract.target);
       return deployedContract; // Return the deployed contract
+  }
+
+  function logUserAddresses(addresses, names) {
+      if (addresses.length !== names.length) {
+          console.error("Error: Addresses and names arrays must have the same length.");
+          return;
+      }
+
+      for (let i = 0; i < addresses.length; ++i) {
+          console.log(`${names[i]}: ${addresses[i]}`);
+      }
   }
 
   async function log_EthBalance(address, name) {

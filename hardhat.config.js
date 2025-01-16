@@ -17,9 +17,9 @@ module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
-      forking: {
-        url: "https://arb1.arbitrum.io/rpc"
-      },
+      // forking: {
+      //   url: "https://arb1.arbitrum.io/rpc"
+      // },
       chainId: 31337 // 0x7A69 hexadecimal
     },
     arbitrumOne: {

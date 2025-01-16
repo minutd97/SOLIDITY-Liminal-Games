@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "hardhat/console.sol";
+
 contract KaijiNoYurei {
     uint constant PLAYER_LIMIT = 5;
     uint constant START_POINTS = 10;
@@ -12,148 +14,269 @@ contract KaijiNoYurei {
         uint selectedNumber;
     }
 
-    struct Room {
+    struct Game {
         bool active;
-        uint playerCount;
-        uint roundCount;
         uint roundStartTime;
-        mapping(address => Player) players;
         address[] playerAddresses;
+        mapping(address => Player) players;
     }
 
-    uint public roomCount;
-    mapping(uint => Room) public rooms;
+    Game public currentGame;
 
-    event RoomCreated(uint roomId);
-    event PlayerJoined(uint roomId, address player);
-    event GameStarted(uint roomId);
-    event RoundStarted(uint roomId, uint roundNumber);
-    event RoundEnded(uint roomId, uint roundNumber);
-    event PlayerEliminated(uint roomId, address player);
+    event GameStarted();
+    event RoundStarted(uint roundNumber);
+    event RoundEnded(uint roundNumber);
+    event PlayerEliminated(address player);
+    event PlayerLostPoints(address player, uint pointsLost);
+    event PlayerSelectedNumber(address player, uint number);
 
-    constructor() {
-        createRoom(); // Create the initial room
+    modifier onlyActiveGame() {
+        require(currentGame.active, "No active game");
+        _;
     }
 
-    function createRoom() public {
-        roomCount++;
-        Room storage newRoom = rooms[roomCount];
-        newRoom.active = true;
-        emit RoomCreated(roomCount);
+    function joinGame() external {
+        require(!currentGame.active, "Game already started");
+        require(currentGame.players[msg.sender].points == 0, "Player already joined");
+        require(currentGame.playerAddresses.length < PLAYER_LIMIT, "Game is full");
+
+        currentGame.players[msg.sender] = Player(START_POINTS, false, 0);
+        currentGame.playerAddresses.push(msg.sender);
     }
 
-    function joinRoom() external {
-        Room storage currentRoom = rooms[roomCount];
-        require(currentRoom.playerCount < PLAYER_LIMIT, "Room is full");
-        require(!currentRoom.active, "Game has already started");
-        require(currentRoom.players[msg.sender].points == 0, "Player already in room");
+    function startGame() external {
+        require(!currentGame.active, "Game already active");
+        require(currentGame.playerAddresses.length == PLAYER_LIMIT, "Not enough players to start the game");
 
-        currentRoom.players[msg.sender] = Player(START_POINTS, false, 0);
-        currentRoom.playerAddresses.push(msg.sender);
-        currentRoom.playerCount++;
-
-        emit PlayerJoined(roomCount, msg.sender);
-
-        if (currentRoom.playerCount == PLAYER_LIMIT) {
-            startGame();
-        }
+        currentGame.active = true;
+        emit GameStarted();
     }
 
-    function startGame() public {
-        Room storage currentRoom = rooms[roomCount];
-        require(currentRoom.playerCount == PLAYER_LIMIT, "Room is not full");
-        require(currentRoom.active, "Room is inactive");
+    function startRound() external onlyActiveGame {
+        require(currentGame.roundStartTime == 0, "Previous round not over");
 
-        currentRoom.roundCount = 0;
-        currentRoom.active = true;
-
-        createRoom(); // Automatically create the next room for new players
-        emit GameStarted(roomCount);
-    }
-
-    function startRound() external {
-        Room storage currentRoom = rooms[roomCount];
-        require(currentRoom.active, "Game is not active");
-
-        currentRoom.roundCount++;
-        currentRoom.roundStartTime = block.timestamp;
-
-        // Reset player selections for the new round
-        for (uint i = 0; i < currentRoom.playerAddresses.length; i++) {
-            address playerAddr = currentRoom.playerAddresses[i];
-            currentRoom.players[playerAddr].hasSelectedNumber = false;
-            currentRoom.players[playerAddr].selectedNumber = 0;
+        // Reset selections for the round
+        for (uint i = 0; i < currentGame.playerAddresses.length; i++) {
+            address playerAddr = currentGame.playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+            player.hasSelectedNumber = false;
+            player.selectedNumber = 0;
         }
 
-        emit RoundStarted(roomCount, currentRoom.roundCount);
+        currentGame.roundStartTime = block.timestamp;
+        emit RoundStarted(currentGame.playerAddresses.length);
     }
 
-    function selectNumber(uint number) external {
+    function selectNumber(uint number) external onlyActiveGame {
         require(number >= 0 && number <= 100, "Invalid number");
-
-        Room storage currentRoom = rooms[roomCount];
-        Player storage player = currentRoom.players[msg.sender];
-
+        Player storage player = currentGame.players[msg.sender];
         require(player.points > 0, "Player is eliminated");
         require(!player.hasSelectedNumber, "Number already selected");
-        require(block.timestamp <= currentRoom.roundStartTime + ROUND_TIME, "Time is up");
+        require(block.timestamp <= currentGame.roundStartTime + ROUND_TIME, "Time is up");
 
         player.hasSelectedNumber = true;
         player.selectedNumber = number;
+
+        emit PlayerSelectedNumber(msg.sender, number);
     }
 
-    function endRound() external {
-        Room storage currentRoom = rooms[roomCount];
-        require(block.timestamp > currentRoom.roundStartTime + ROUND_TIME, "Round time not over");
+    function endRound() external onlyActiveGame {
+        require(block.timestamp > currentGame.roundStartTime + ROUND_TIME, "Round time not over");
 
         uint sum = 0;
         uint validSelections = 0;
-        for (uint i = 0; i < currentRoom.playerAddresses.length; i++) {
-            address playerAddr = currentRoom.playerAddresses[i];
-            Player storage player = currentRoom.players[playerAddr];
+        uint activePlayers = 0;
+        address[] memory playerAddresses = currentGame.playerAddresses;
 
-            if (player.hasSelectedNumber) {
-                sum += player.selectedNumber;
-                validSelections++;
-            }
-        }
+        // Count active players and calculate sum for valid selections
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
 
-        uint targetNumber = (sum * 8) / (10 * validSelections);
-        address closestPlayer;
-        uint closestDifference = type(uint).max;
-
-        for (uint i = 0; i < currentRoom.playerAddresses.length; i++) {
-            address playerAddr = currentRoom.playerAddresses[i];
-            Player storage player = currentRoom.players[playerAddr];
-
-            if (player.hasSelectedNumber) {
-                uint difference = player.selectedNumber > targetNumber
-                    ? player.selectedNumber - targetNumber
-                    : targetNumber - player.selectedNumber;
-
-                if (difference < closestDifference) {
-                    closestDifference = difference;
-                    closestPlayer = playerAddr;
+            if (player.points > 0) {
+                activePlayers++;
+                if (player.hasSelectedNumber) {
+                    sum += player.selectedNumber;
+                    validSelections++;
                 }
-            } else {
-                player.points--; // Penalize for not selecting
             }
         }
 
-        if (closestPlayer != address(0)) {
-            currentRoom.players[closestPlayer].points++;
+        require(validSelections > 0, "No valid selections this round");
+
+        // Calculate target number with precision
+        uint precision = 100; // Scale to 2 decimal places
+        uint targetNumber = (sum * 8 * precision) / (10 * validSelections);
+        console.log("Target Number (scaled):", targetNumber);
+
+        // Base Game: Calculate closest player
+        address[] memory closestPlayers = new address[](playerAddresses.length);
+        uint closestDifference = type(uint).max;
+        uint closestPlayerCount = 0;
+
+        // Find the closest players to the target number
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.hasSelectedNumber) {
+                // Calculate the absolute difference with scaled precision
+                uint scaledDifference = player.selectedNumber * precision > targetNumber
+                    ? player.selectedNumber * precision - targetNumber
+                    : targetNumber - player.selectedNumber * precision;
+
+                if (scaledDifference < closestDifference) {
+                    // New smallest difference found, reset closestPlayers list
+                    closestDifference = scaledDifference;
+                    closestPlayerCount = 1;
+                    closestPlayers[0] = playerAddr;
+                } else if (scaledDifference == closestDifference) {
+                    // Another player with the same closest difference
+                    closestPlayers[closestPlayerCount] = playerAddr;
+                    closestPlayerCount++;
+                }
+            }
         }
 
-        for (uint i = 0; i < currentRoom.playerAddresses.length; i++) {
-            address playerAddr = currentRoom.playerAddresses[i];
-            Player storage player = currentRoom.players[playerAddr];
+        // Resize closestPlayers array to match the actual count of closest players
+        assembly {
+            mstore(closestPlayers, closestPlayerCount)
+        }
+
+        console.log("Closest players count:", closestPlayers.length);
+
+        // Apply rules based on the number of active players
+        if (activePlayers == 5) {
+            handleEqualDistancePenalty(closestPlayers);
+        }
+        if (activePlayers <= 4) {
+            handleDuplicatePenalty(playerAddresses);
+        }
+        if (activePlayers <= 3) {
+            handleExactMatchRule(playerAddresses, targetNumber, precision);
+        }
+        if (activePlayers == 2) {
+            handleZeroVsHundredRule(playerAddresses);
+        }
+
+        // Base Game: Penalize all players except the closest
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.points > 0 && !isInArray(playerAddr, closestPlayers)) {
+                player.points--;
+                emit PlayerLostPoints(playerAddr, 1);
+
+                if (player.points == 0) {
+                    emit PlayerEliminated(playerAddr);
+                }
+            }
+        }
+
+        emit RoundEnded(activePlayers);
+    }
+
+    function handleEqualDistancePenalty(address[] memory closestPlayers) internal {
+        for (uint i = 0; i < closestPlayers.length; i++) {
+            address playerAddr = closestPlayers[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            player.points--;
+            emit PlayerLostPoints(playerAddr, 1);
 
             if (player.points == 0) {
-                emit PlayerEliminated(roomCount, playerAddr);
-                // Remove player from the game
+                emit PlayerEliminated(playerAddr);
+            }
+        }
+    }
+
+    function handleDuplicatePenalty(address[] memory playerAddresses) internal {
+        mapping(uint => uint) memory numberFrequency;
+
+        // Count frequency of selected numbers
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.hasSelectedNumber) {
+                numberFrequency[player.selectedNumber]++;
             }
         }
 
-        emit RoundEnded(roomCount, currentRoom.roundCount);
+        // Penalize players who selected duplicate numbers
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.hasSelectedNumber && numberFrequency[player.selectedNumber] > 1) {
+                player.points--;
+                emit PlayerLostPoints(playerAddr, 1);
+
+                if (player.points == 0) {
+                    emit PlayerEliminated(playerAddr);
+                }
+            }
+        }
+    }
+
+    function handleExactMatchRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal {
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.hasSelectedNumber && player.selectedNumber * precision == targetNumber) {
+                // Exact match found
+                for (uint j = 0; j < playerAddresses.length; j++) {
+                    address otherPlayer = playerAddresses[j];
+                    if (otherPlayer != playerAddr) {
+                        Player storage other = currentGame.players[otherPlayer];
+                        other.points -= 2;
+                        emit PlayerLostPoints(otherPlayer, 2);
+
+                        if (other.points == 0) {
+                            emit PlayerEliminated(otherPlayer);
+                        }
+                    }
+                }
+                return; // Exit once the rule is applied
+            }
+        }
+    }
+
+    function handleZeroVsHundredRule(address[] memory playerAddresses) internal {
+        address zeroPlayer;
+        address hundredPlayer;
+
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.selectedNumber == 0) {
+                zeroPlayer = playerAddr;
+            } else if (player.selectedNumber == 100) {
+                hundredPlayer = playerAddr;
+            }
+        }
+
+        if (zeroPlayer != address(0) && hundredPlayer != address(0)) {
+            currentGame.players[hundredPlayer].points++;
+            currentGame.players[zeroPlayer].points--;
+
+            emit PlayerLostPoints(zeroPlayer, 1);
+
+            if (currentGame.players[zeroPlayer].points == 0) {
+                emit PlayerEliminated(zeroPlayer);
+            }
+        }
+    }
+
+    function isInArray(address addr, address[] memory array) internal pure returns (bool) {
+        for (uint i = 0; i < array.length; i++) {
+            if (array[i] == addr) {
+                return true;
+            }
+        }
+        return false;
     }
 }

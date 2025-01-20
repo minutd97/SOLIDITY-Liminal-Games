@@ -5,7 +5,7 @@ import "hardhat/console.sol";
 
 contract KaijiNoYurei {
     uint constant PLAYER_LIMIT = 5;
-    uint constant START_POINTS = 30;
+    uint constant START_POINTS = 10;
     uint constant ROUND_TIME = 3 minutes;
 
     struct Player {
@@ -149,8 +149,17 @@ contract KaijiNoYurei {
     function endRound(uint activePlayers) internal {
         currentGame.roundStartTime = 0;
         emit RoundEnded(activePlayers);
+        returnPlayerPoints();
         // Check if the game has ended
         //checkForWinner(playerAddresses, activePlayers);
+    }
+
+    //PLEASE REMOVE THIS IN PRODUCTION
+    function returnPlayerPoints() public view {
+        address[] memory playersAddr = currentGame.playerAddresses;
+        for (uint i = 0; i < playersAddr.length; i++){
+            console.log("Player", (i + 1), "Points Left:", currentGame.players[playersAddr[i]].points);
+        }
     }
 
     function penalizePlayer(address playerAddr, uint points) internal {
@@ -165,7 +174,7 @@ contract KaijiNoYurei {
             }
                 
             emit PlayerLostPoints(playerAddr, points);
-            console.log("Player Penalized : ", playerAddr, " Points left:", player.points);
+            //console.log("Player Penalized : ", playerAddr, " Points left:", player.points);
 
             if (player.points == 0) {
                 emit PlayerEliminated(playerAddr);
@@ -241,55 +250,75 @@ contract KaijiNoYurei {
         }
     }
 
-    // function handleConsecutiveNumberPenalty(address[] memory playerAddresses) internal {
-    //     // Use a fixed-size array to track ownership of numbers (0-100 range)
-    //     address[101] memory numberOwners;
-
+    // function handleExactMatchRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal returns (bool) {
+    //     uint exactMatchCount = 0;
+    //     // Find out how many players has an exact match for the targetNumber
     //     for (uint i = 0; i < playerAddresses.length; i++) {
     //         address playerAddr = playerAddresses[i];
     //         Player storage player = currentGame.players[playerAddr];
 
-    //         if (player.hasSelectedNumber) {
-    //             uint selectedNumber = player.selectedNumber;
-
-    //             // Check for consecutive numbers
-    //             if (
-    //                 (selectedNumber > 0 && numberOwners[selectedNumber - 1] != address(0)) ||
-    //                 (selectedNumber < 100 && numberOwners[selectedNumber + 1] != address(0))
-    //             ) {
-    //                 // Penalize the player for consecutive selection
-    //                 player.points--;
-    //                 emit PlayerLostPoints(playerAddr, 1);
-
-    //                 if (player.points == 0) {
-    //                     emit PlayerEliminated(playerAddr);
-    //                 }
-    //             }
-
-    //             // Record ownership of this number
-    //             numberOwners[selectedNumber] = playerAddr;
+    //         if (player.hasSelectedNumber && player.selectedNumber * precision == targetNumber) {
+    //             exactMatchCount++;
     //         }
+    //     }
+
+    //     // If there is more then one player or none this rule is invalid.
+    //     if (exactMatchCount == 0 || exactMatchCount > 1){
+    //         return false;
+    //     }
+    //     else{
+    //         for (uint i = 0; i < playerAddresses.length; i++) {
+    //             address playerAddr = playerAddresses[i];
+    //             Player storage player = currentGame.players[playerAddr];
+
+    //             if (player.hasSelectedNumber && player.selectedNumber * precision != targetNumber) {
+    //                 penalizePlayer(playerAddr, 2);
+    //             }
+    //         }
+    //         console.log("Handled Exact Match Override Rule");
+    //         return true; // Exact Match Override Rule
     //     }
     // }
 
     function handleExactMatchRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal returns (bool) {
+        address exactMatchPlayer;
+        uint exactMatchCount = 0;
+
+        // Find exact matches for the targetNumber
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
             Player storage player = currentGame.players[playerAddr];
 
             if (player.hasSelectedNumber && player.selectedNumber * precision == targetNumber) {
-                for (uint j = 0; j < playerAddresses.length; j++) {
-                    address otherPlayer = playerAddresses[j];
-                    if (otherPlayer != playerAddr) {
-                        penalizePlayer(otherPlayer, 2);
-                    }
+                exactMatchPlayer = playerAddr;
+                exactMatchCount++;
+
+                // Exit early if more than one exact match is found
+                if (exactMatchCount > 1) {
+                    return false;
                 }
-                console.log("Handled Exact Match Override Rule");
-                return true; // Exact Match Override Rule
             }
         }
-        return false;
+
+        // If no exact matches, return false
+        if (exactMatchCount == 0) {
+            return false;
+        }
+
+        // Penalize all other players
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.hasSelectedNumber && playerAddr != exactMatchPlayer) {
+                penalizePlayer(playerAddr, 2);
+            }
+        }
+
+        console.log("Handled Exact Match Override Rule");
+        return true; // Exact Match Override Rule
     }
+
 
     function handleExtremeBluffRule(address[] memory playerAddresses) internal returns (bool) {
         address zeroPlayer;
@@ -299,9 +328,11 @@ contract KaijiNoYurei {
             address playerAddr = playerAddresses[i];
             Player storage player = currentGame.players[playerAddr];
 
-            if (player.selectedNumber == 0) {
+            if (player.selectedNumber == 0 && player.hasSelectedNumber) {
                 zeroPlayer = playerAddr;
-            } else if (player.selectedNumber == 100) {
+            }
+
+            if (player.selectedNumber == 100 && player.hasSelectedNumber) {
                 hundredPlayer = playerAddr;
             }
         }

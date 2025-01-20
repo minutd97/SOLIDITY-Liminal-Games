@@ -79,6 +79,21 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       console.log("_____Closest Tie Penalty + Time’s Up Penalty");
       await simulateSelection([25, 25, -1, -1, 26], users, owner);
 
+      await simulateSelection([25, 20, -1, -1, 26], users, owner);
+
+      await simulateSelection([25, 20, -1, -1, 26], users, owner);
+
+      // Scenario 6: Exact Match Bonus + Time’s Up Penalty
+      console.log("_____Exact Match Bonus + Time’s Up Penalty");
+      await simulateSelection([33, -1, -1, -1, 22], users, owner);
+
+      await simulateSelection([33, 22, -1, -1, 22], users, owner);
+
+      await simulateSelection([33, 22, -1, -1, 22], users, owner);
+
+      // Scenario 7: Extreme Bluff Rule
+      await simulateSelection([0, -1, -1, -1, 100], users, owner);
+
     });
   });
 

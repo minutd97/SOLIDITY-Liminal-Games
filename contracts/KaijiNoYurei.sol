@@ -29,6 +29,7 @@ contract KaijiNoYurei {
     event PlayerEliminated(address player);
     event PlayerLostPoints(address player, uint pointsLost);
     event PlayerSelectedNumber(address player, uint number);
+    event GameWon(address player);
 
     modifier onlyActiveGame() {
         require(currentGame.active, "No active game");
@@ -102,149 +103,186 @@ contract KaijiNoYurei {
             }
         }
 
-        require(validSelections > 0, "No valid selections this round");
+        // Check timeout conditions
+        if (validSelections < activePlayers) {
+            // Majority timeout rule
+            if (applyTimeoutPenalty(playerAddresses, activePlayers))
+                return;
+        }
 
         // Calculate target number with precision
         uint precision = 100; // Scale to 2 decimal places
         uint targetNumber = (sum * 8 * precision) / (10 * validSelections);
         console.log("Target Number (scaled):", targetNumber);
 
-        // Base Game: Calculate closest player
-        address[] memory closestPlayers = new address[](playerAddresses.length);
+        // Handle rules based on player count
+        if(activePlayers <= 3){
+            //Exact Match Override: No additional rules applied
+            if (handleExactMatchRule(playerAddresses, targetNumber, precision)) {
+                return;
+            }
+        }
+
+        bool baseRuleGetsApplied = true;
+        if (activePlayers <= 5){
+            baseRuleGetsApplied = handleClosestTiePenalty(playerAddresses, targetNumber, precision);
+        }
+
+        if (activePlayers <= 2){
+            if (baseRuleGetsApplied)
+                baseRuleGetsApplied = handleExtremeBluffRule(playerAddresses);
+            else
+                handleExtremeBluffRule(playerAddresses);
+        }
+
+        if(baseRuleGetsApplied){
+            // Apply Base Rule: Penalize players not closest to target number
+            applyBaseRule(playerAddresses, targetNumber, precision);
+        }
+
+        emit RoundEnded(activePlayers);
+
+        // Check if the game has ended
+        //checkForWinner(playerAddresses, activePlayers);
+    }
+
+    function penalizePlayer(address playerAddr, uint points) internal {
+        Player storage player = currentGame.players[playerAddr];
+        
+        if (player.points > 0){
+            if (player.points < points){
+                player.points = 0;
+            }    
+            else{
+                player.points -= points;
+            }
+                
+            emit PlayerLostPoints(playerAddr, points);
+
+            if (player.points == 0) {
+                emit PlayerEliminated(playerAddr);
+            }    
+        }
+    }
+
+    function applyTimeoutPenalty(address[] memory playerAddresses, uint activePlayers) internal returns(bool) {
+        uint timeoutCount = 0;
+
+        // Apply timeout penalty
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (!player.hasSelectedNumber && player.points > 0) {
+                penalizePlayer(playerAddr, 2);
+                timeoutCount++;
+            }
+        }
+
+        if(activePlayers == 2){
+            console.log("Majority Timeout Rule applied, 1v1 case");
+            return true;
+        }
+
+        // Apply Majority Timeout Rule
+        if (timeoutCount * 100 / activePlayers >= 60) {
+            console.log("Majority Timeout Rule applied");
+            return true;
+        }
+        return false;
+    }
+
+    function handleClosestTiePenalty(address[] memory playerAddresses, uint targetNumber, uint precision) internal returns(bool) {
         uint closestDifference = type(uint).max;
+        address[] memory closestPlayers = new address[](playerAddresses.length);
         uint closestPlayerCount = 0;
 
-        // Find the closest players to the target number
+        // Find closest players
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
             Player storage player = currentGame.players[playerAddr];
 
             if (player.hasSelectedNumber) {
-                // Calculate the absolute difference with scaled precision
                 uint scaledDifference = player.selectedNumber * precision > targetNumber
                     ? player.selectedNumber * precision - targetNumber
                     : targetNumber - player.selectedNumber * precision;
 
                 if (scaledDifference < closestDifference) {
-                    // New smallest difference found, reset closestPlayers list
                     closestDifference = scaledDifference;
                     closestPlayerCount = 1;
                     closestPlayers[0] = playerAddr;
                 } else if (scaledDifference == closestDifference) {
-                    // Another player with the same closest difference
                     closestPlayers[closestPlayerCount] = playerAddr;
                     closestPlayerCount++;
                 }
             }
         }
 
-        // Resize closestPlayers array to match the actual count of closest players
-        assembly {
-            mstore(closestPlayers, closestPlayerCount)
-        }
-
-        console.log("Closest players count:", closestPlayers.length);
-
-        // Apply rules based on the number of active players
-        if (activePlayers == 5) {
-            handleEqualDistancePenalty(closestPlayers);
-        }
-        if (activePlayers <= 4) {
-            handleDuplicatePenalty(playerAddresses);
-        }
-        if (activePlayers <= 3) {
-            handleExactMatchRule(playerAddresses, targetNumber, precision);
-        }
-        if (activePlayers == 2) {
-            handleZeroVsHundredRule(playerAddresses);
-        }
-
-        // Base Game: Penalize all players except the closest
-        for (uint i = 0; i < playerAddresses.length; i++) {
-            address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
-
-            if (player.points > 0 && !isInArray(playerAddr, closestPlayers)) {
-                player.points--;
-                emit PlayerLostPoints(playerAddr, 1);
-
-                if (player.points == 0) {
-                    emit PlayerEliminated(playerAddr);
-                }
+        if(closestPlayerCount > 1){
+            // Penalize all closest players
+            for (uint i = 0; i < closestPlayerCount; i++) {
+                address playerAddr = closestPlayers[i];
+                penalizePlayer(playerAddr, 1);
             }
+            console.log("Handled Closest Tie Penalty");
+            return false;
         }
-
-        emit RoundEnded(activePlayers);
-    }
-
-    function handleEqualDistancePenalty(address[] memory closestPlayers) internal {
-        for (uint i = 0; i < closestPlayers.length; i++) {
-            address playerAddr = closestPlayers[i];
-            Player storage player = currentGame.players[playerAddr];
-
-            player.points--;
-            emit PlayerLostPoints(playerAddr, 1);
-
-            if (player.points == 0) {
-                emit PlayerEliminated(playerAddr);
-            }
+        else{
+            return true;
         }
     }
 
-    function handleDuplicatePenalty(address[] memory playerAddresses) internal {
-        mapping(uint => uint) memory numberFrequency;
+    // function handleConsecutiveNumberPenalty(address[] memory playerAddresses) internal {
+    //     // Use a fixed-size array to track ownership of numbers (0-100 range)
+    //     address[101] memory numberOwners;
 
-        // Count frequency of selected numbers
-        for (uint i = 0; i < playerAddresses.length; i++) {
-            address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+    //     for (uint i = 0; i < playerAddresses.length; i++) {
+    //         address playerAddr = playerAddresses[i];
+    //         Player storage player = currentGame.players[playerAddr];
 
-            if (player.hasSelectedNumber) {
-                numberFrequency[player.selectedNumber]++;
-            }
-        }
+    //         if (player.hasSelectedNumber) {
+    //             uint selectedNumber = player.selectedNumber;
 
-        // Penalize players who selected duplicate numbers
-        for (uint i = 0; i < playerAddresses.length; i++) {
-            address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+    //             // Check for consecutive numbers
+    //             if (
+    //                 (selectedNumber > 0 && numberOwners[selectedNumber - 1] != address(0)) ||
+    //                 (selectedNumber < 100 && numberOwners[selectedNumber + 1] != address(0))
+    //             ) {
+    //                 // Penalize the player for consecutive selection
+    //                 player.points--;
+    //                 emit PlayerLostPoints(playerAddr, 1);
 
-            if (player.hasSelectedNumber && numberFrequency[player.selectedNumber] > 1) {
-                player.points--;
-                emit PlayerLostPoints(playerAddr, 1);
+    //                 if (player.points == 0) {
+    //                     emit PlayerEliminated(playerAddr);
+    //                 }
+    //             }
 
-                if (player.points == 0) {
-                    emit PlayerEliminated(playerAddr);
-                }
-            }
-        }
-    }
+    //             // Record ownership of this number
+    //             numberOwners[selectedNumber] = playerAddr;
+    //         }
+    //     }
+    // }
 
-    function handleExactMatchRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal {
+    function handleExactMatchRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal returns (bool) {
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
             Player storage player = currentGame.players[playerAddr];
 
             if (player.hasSelectedNumber && player.selectedNumber * precision == targetNumber) {
-                // Exact match found
                 for (uint j = 0; j < playerAddresses.length; j++) {
                     address otherPlayer = playerAddresses[j];
                     if (otherPlayer != playerAddr) {
-                        Player storage other = currentGame.players[otherPlayer];
-                        other.points -= 2;
-                        emit PlayerLostPoints(otherPlayer, 2);
-
-                        if (other.points == 0) {
-                            emit PlayerEliminated(otherPlayer);
-                        }
+                        penalizePlayer(otherPlayer, 2);
                     }
                 }
-                return; // Exit once the rule is applied
+                console.log("Handled Exact Match Override Rule");
+                return true; // Exact Match Override Rule
             }
         }
+        return false;
     }
 
-    function handleZeroVsHundredRule(address[] memory playerAddresses) internal {
+    function handleExtremeBluffRule(address[] memory playerAddresses) internal returns (bool) {
         address zeroPlayer;
         address hundredPlayer;
 
@@ -260,23 +298,67 @@ contract KaijiNoYurei {
         }
 
         if (zeroPlayer != address(0) && hundredPlayer != address(0)) {
-            currentGame.players[hundredPlayer].points++;
-            currentGame.players[zeroPlayer].points--;
+            penalizePlayer(zeroPlayer, 1);
+            console.log("Handled Extreme Bluff Rule");
+            return false;
+        }
+        else{
+            return true;
+        }
+    }
 
-            emit PlayerLostPoints(zeroPlayer, 1);
+    function applyBaseRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal {
+        uint closestDifference = type(uint).max;
+        address closestPlayer;
+        bool foundClosestPlayer = false;
 
-            if (currentGame.players[zeroPlayer].points == 0) {
-                emit PlayerEliminated(zeroPlayer);
+        // Identify the closest player to the target number
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.hasSelectedNumber) {
+                uint scaledDifference = player.selectedNumber * precision > targetNumber
+                    ? player.selectedNumber * precision - targetNumber
+                    : targetNumber - player.selectedNumber * precision;
+
+                if (scaledDifference < closestDifference) {
+                    closestDifference = scaledDifference;
+                    closestPlayer = playerAddr;
+                    foundClosestPlayer = true;
+                }
+            }
+        }
+
+        // Penalize all players except the closest one
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.points > 0 && playerAddr != closestPlayer) {
+                penalizePlayer(playerAddr, 1);
+            }
+        }
+
+        // Emit closest player event for debugging
+        if (foundClosestPlayer) {
+            console.log("BASE RULE, Closest Player:", closestPlayer, "with Difference:", closestDifference);
+        }
+    }
+
+    function checkForWinner(address[] memory playerAddresses, uint activePlayers) internal {
+        if (activePlayers == 1) {
+            for (uint i = 0; i < playerAddresses.length; i++) {
+                address playerAddr = playerAddresses[i];
+                Player storage player = currentGame.players[playerAddr];
+
+                if (player.points > 0) {
+                    console.log("Game Won by Player:", playerAddr);
+                    emit GameWon(playerAddr);
+                    return;
+                }
             }
         }
     }
 
-    function isInArray(address addr, address[] memory array) internal pure returns (bool) {
-        for (uint i = 0; i < array.length; i++) {
-            if (array[i] == addr) {
-                return true;
-            }
-        }
-        return false;
-    }
 }

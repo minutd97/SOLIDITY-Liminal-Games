@@ -5,7 +5,7 @@ import "hardhat/console.sol";
 
 contract KaijiNoYurei {
     uint constant PLAYER_LIMIT = 5;
-    uint constant START_POINTS = 10;
+    uint constant START_POINTS = 30;
     uint constant ROUND_TIME = 3 minutes;
 
     struct Player {
@@ -81,7 +81,7 @@ contract KaijiNoYurei {
         emit PlayerSelectedNumber(msg.sender, number);
     }
 
-    function endRound() external onlyActiveGame {
+    function processRound() external onlyActiveGame {
         require(block.timestamp > currentGame.roundStartTime + ROUND_TIME, "Round time not over");
 
         uint sum = 0;
@@ -106,8 +106,10 @@ contract KaijiNoYurei {
         // Check timeout conditions
         if (validSelections < activePlayers) {
             // Majority timeout rule
-            if (applyTimeoutPenalty(playerAddresses, activePlayers))
+            if (applyTimeoutPenalty(playerAddresses, activePlayers)){
+                endRound(activePlayers);
                 return;
+            }          
         }
 
         // Calculate target number with precision
@@ -119,6 +121,7 @@ contract KaijiNoYurei {
         if(activePlayers <= 3){
             //Exact Match Override: No additional rules applied
             if (handleExactMatchRule(playerAddresses, targetNumber, precision)) {
+                endRound(activePlayers);
                 return;
             }
         }
@@ -140,8 +143,12 @@ contract KaijiNoYurei {
             applyBaseRule(playerAddresses, targetNumber, precision);
         }
 
-        emit RoundEnded(activePlayers);
+        endRound(activePlayers);
+    }
 
+    function endRound(uint activePlayers) internal {
+        currentGame.roundStartTime = 0;
+        emit RoundEnded(activePlayers);
         // Check if the game has ended
         //checkForWinner(playerAddresses, activePlayers);
     }
@@ -158,9 +165,11 @@ contract KaijiNoYurei {
             }
                 
             emit PlayerLostPoints(playerAddr, points);
+            console.log("Player Penalized : ", playerAddr, " Points left:", player.points);
 
             if (player.points == 0) {
                 emit PlayerEliminated(playerAddr);
+                console.log("Player Eliminated : ", playerAddr);
             }    
         }
     }
@@ -330,12 +339,12 @@ contract KaijiNoYurei {
             }
         }
 
-        // Penalize all players except the closest one
+        // Penalize all players that had a valid number except the closest one
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
             Player storage player = currentGame.players[playerAddr];
 
-            if (player.points > 0 && playerAddr != closestPlayer) {
+            if (player.points > 0 && playerAddr != closestPlayer && player.hasSelectedNumber) {
                 penalizePlayer(playerAddr, 1);
             }
         }

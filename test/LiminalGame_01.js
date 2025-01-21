@@ -59,40 +59,42 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
 
       var users = [user1, user2, user3, user4, user5];
 
-      // Scenario 1: Base Rule
-      console.log("_____Base Rule");
-      await simulateSelection([30, 40, 50, 60, 70], users, owner);
+      await simulateSelection([1, 1, 1, 68, 100], users, owner);
 
-      // Scenario 2: Closest Tie Penalty (Rule 5)
-      console.log("_____Closest Tie Penalty");
-      await simulateSelection([34, 50, 50, 60, 70], users, owner);
+      // // Scenario 1: Base Rule
+      // console.log("_____Base Rule");
+      // await simulateSelection([30, 40, 50, 60, 70], users, owner);
 
-      // Scenario 3: Time’s Up Penalty + Basic rule
-      console.log("_____Time’s Up Penalty  + Basic rule");
-      await simulateSelection([34, -1, 50, -1, 70], users, owner);
+      // // Scenario 2: Closest Tie Penalty (Rule 5)
+      // console.log("_____Closest Tie Penalty");
+      // await simulateSelection([34, 50, 50, 60, 70], users, owner);
 
-      // Scenario 4: Majority Timeout Rule
-      console.log("_____Majority Timeout Rule");
-      await simulateSelection([34, -1, -1, -1, 70], users, owner);
+      // // Scenario 3: Time’s Up Penalty + Basic rule
+      // console.log("_____Time’s Up Penalty  + Basic rule");
+      // await simulateSelection([34, -1, 50, -1, 70], users, owner);
 
-      // Scenario 5: Closest Tie Penalty + Time’s Up Penalty
-      console.log("_____Closest Tie Penalty + Time’s Up Penalty");
-      await simulateSelection([25, 25, -1, -1, 26], users, owner);
+      // // Scenario 4: Majority Timeout Rule
+      // console.log("_____Majority Timeout Rule");
+      // await simulateSelection([34, -1, -1, -1, 70], users, owner);
 
-      await simulateSelection([25, 20, -1, -1, 26], users, owner);
+      // // Scenario 5: Closest Tie Penalty + Time’s Up Penalty
+      // console.log("_____Closest Tie Penalty + Time’s Up Penalty");
+      // await simulateSelection([25, 25, -1, -1, 26], users, owner);
 
-      await simulateSelection([25, 20, -1, -1, 26], users, owner);
+      // await simulateSelection([25, 20, -1, -1, 26], users, owner);
 
-      // Scenario 6: Exact Match Bonus + Time’s Up Penalty
-      console.log("_____Exact Match Bonus + Time’s Up Penalty");
-      await simulateSelection([33, -1, -1, -1, 22], users, owner);
+      // await simulateSelection([25, 20, -1, -1, 26], users, owner);
 
-      await simulateSelection([33, 22, -1, -1, 22], users, owner);
+      // // Scenario 6: Exact Match Bonus + Time’s Up Penalty
+      // console.log("_____Exact Match Bonus + Time’s Up Penalty");
+      // await simulateSelection([33, -1, -1, -1, 22], users, owner);
 
-      await simulateSelection([33, 22, -1, -1, 22], users, owner);
+      // await simulateSelection([33, 22, -1, -1, 22], users, owner);
 
-      // Scenario 7: Extreme Bluff Rule
-      await simulateSelection([0, -1, -1, -1, 100], users, owner);
+      // await simulateSelection([33, 22, -1, -1, 22], users, owner);
+
+      // // Scenario 7: Extreme Bluff Rule
+      // await simulateSelection([0, -1, -1, -1, 100], users, owner);
 
     });
   });

@@ -74,9 +74,9 @@ contract KaijiNoYurei {
         require(player.points > 0, "Player is eliminated");
         require(!player.hasSelectedNumber, "Number already selected");
         require(block.timestamp <= currentGame.roundStartTime + ROUND_TIME, "Time is up");
-
-        player.hasSelectedNumber = true;
+        
         player.selectedNumber = number;
+        player.hasSelectedNumber = true;
 
         emit PlayerSelectedNumber(msg.sender, number);
     }
@@ -107,7 +107,7 @@ contract KaijiNoYurei {
         if (validSelections < activePlayers) {
             // Majority timeout rule
             if (applyTimeoutPenalty(playerAddresses, activePlayers)){
-                endRound(activePlayers);
+                endRound(activePlayers, playerAddresses);
                 return;
             }          
         }
@@ -121,7 +121,7 @@ contract KaijiNoYurei {
         if(activePlayers <= 3){
             //Exact Match Override: No additional rules applied
             if (handleExactMatchRule(playerAddresses, targetNumber, precision)) {
-                endRound(activePlayers);
+                endRound(activePlayers, playerAddresses);
                 return;
             }
         }
@@ -143,15 +143,14 @@ contract KaijiNoYurei {
             applyBaseRule(playerAddresses, targetNumber, precision);
         }
 
-        endRound(activePlayers);
+        endRound(activePlayers, playerAddresses);
     }
 
-    function endRound(uint activePlayers) internal {
+    function endRound(uint activePlayers, address[] memory playerAddresses) internal {
         currentGame.roundStartTime = 0;
         emit RoundEnded(activePlayers);
         returnPlayerPoints();
-        // Check if the game has ended
-        //checkForWinner(playerAddresses, activePlayers);
+        checkForWinner(playerAddresses);
     }
 
     //PLEASE REMOVE THIS IN PRODUCTION
@@ -250,36 +249,6 @@ contract KaijiNoYurei {
         }
     }
 
-    // function handleExactMatchRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal returns (bool) {
-    //     uint exactMatchCount = 0;
-    //     // Find out how many players has an exact match for the targetNumber
-    //     for (uint i = 0; i < playerAddresses.length; i++) {
-    //         address playerAddr = playerAddresses[i];
-    //         Player storage player = currentGame.players[playerAddr];
-
-    //         if (player.hasSelectedNumber && player.selectedNumber * precision == targetNumber) {
-    //             exactMatchCount++;
-    //         }
-    //     }
-
-    //     // If there is more then one player or none this rule is invalid.
-    //     if (exactMatchCount == 0 || exactMatchCount > 1){
-    //         return false;
-    //     }
-    //     else{
-    //         for (uint i = 0; i < playerAddresses.length; i++) {
-    //             address playerAddr = playerAddresses[i];
-    //             Player storage player = currentGame.players[playerAddr];
-
-    //             if (player.hasSelectedNumber && player.selectedNumber * precision != targetNumber) {
-    //                 penalizePlayer(playerAddr, 2);
-    //             }
-    //         }
-    //         console.log("Handled Exact Match Override Rule");
-    //         return true; // Exact Match Override Rule
-    //     }
-    // }
-
     function handleExactMatchRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal returns (bool) {
         address exactMatchPlayer;
         uint exactMatchCount = 0;
@@ -318,7 +287,6 @@ contract KaijiNoYurei {
         console.log("Handled Exact Match Override Rule");
         return true; // Exact Match Override Rule
     }
-
 
     function handleExtremeBluffRule(address[] memory playerAddresses) internal returns (bool) {
         address zeroPlayer;
@@ -386,19 +354,33 @@ contract KaijiNoYurei {
         }
     }
 
-    function checkForWinner(address[] memory playerAddresses, uint activePlayers) internal {
-        if (activePlayers == 1) {
-            for (uint i = 0; i < playerAddresses.length; i++) {
-                address playerAddr = playerAddresses[i];
-                Player storage player = currentGame.players[playerAddr];
+    function checkForWinner(address[] memory playerAddresses) internal {
+        //Count how many players still have points
+        uint playerCount = 0;
+        address playerWonAddress;
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
 
-                if (player.points > 0) {
-                    console.log("Game Won by Player:", playerAddr);
-                    emit GameWon(playerAddr);
+            if (player.points > 0) {
+                playerCount++;
+                
+                if (playerCount > 1) {  // Exit early if there are still at least 2 players with points
                     return;
+                }
+                else { 
+                    playerWonAddress = playerAddr;
                 }
             }
         }
-    }
 
+        if (playerCount == 0){
+            console.log("There are no winners for this game");
+        }
+        else{
+            console.log("Game Won by Player:", playerWonAddress);
+            emit GameWon(playerWonAddress);
+        }
+        console.log("Game Clear");
+    }
 }

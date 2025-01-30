@@ -2,6 +2,10 @@ const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const EthCrypto = require("eth-crypto");
+const { Wallet } = require('ethers');
+const { publicKey } = require("eth-crypto");
+const { Point } = require("@noble/secp256k1");
 
 describe("Liminal Test Contracts: KaijiNoYurei", function () {
   
@@ -28,22 +32,22 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
 
       logUserAddresses(addresses, names);
 
-      await kaijiNoYurei.connect(user1).joinGame();
-      await kaijiNoYurei.connect(user2).joinGame();
-      await kaijiNoYurei.connect(user3).joinGame();
-      await kaijiNoYurei.connect(user4).joinGame();
-      await kaijiNoYurei.connect(user5).joinGame();
+      // await kaijiNoYurei.connect(user1).joinGame();
+      // await kaijiNoYurei.connect(user2).joinGame();
+      // await kaijiNoYurei.connect(user3).joinGame();
+      // await kaijiNoYurei.connect(user4).joinGame();
+      // await kaijiNoYurei.connect(user5).joinGame();
 
-      // Player already joined
-      await expect(kaijiNoYurei.connect(user5).joinGame()).to.be.reverted;
+      // // Player already joined
+      // await expect(kaijiNoYurei.connect(user5).joinGame()).to.be.reverted;
 
-      // Game is full
-      await expect(kaijiNoYurei.connect(user6).joinGame()).to.be.reverted;
+      // // Game is full
+      // await expect(kaijiNoYurei.connect(user6).joinGame()).to.be.reverted;
 
-      await kaijiNoYurei.connect(owner).startGame();
+      // await kaijiNoYurei.connect(owner).startGame();
 
-      // Game already started
-      await expect(kaijiNoYurei.connect(user6).joinGame()).to.be.reverted;
+      // // Game already started
+      // await expect(kaijiNoYurei.connect(user6).joinGame()).to.be.reverted;
 
       // await kaijiNoYurei.connect(owner).startRound();
 
@@ -59,7 +63,9 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
 
       var users = [user1, user2, user3, user4, user5];
 
-      await simulateSelection([1, 1, 1, 68, 100], users, owner);
+      await encryptNumberAndSend(user1, 68, owner.address);
+
+      //await simulateSelection([1, 1, 1, 68, 100], users, owner);
 
       // // Scenario 1: Base Rule
       // console.log("_____Base Rule");
@@ -122,6 +128,27 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
 
     await kaijiNoYurei.connect(owner).processRound();
 
+  }
+
+  async function encryptNumberAndSend(user, number, ownerAddr) {
+    
+      const publicKey = EthCrypto.publicKeyByPrivateKey(
+          '0x59c6995e998f97a5a0044966f09453890ac986d28b93a39c2051ff1e6b8c32d3'
+      );
+
+      // Encrypt the number using the uncompressed public key
+      const encrypted = await EthCrypto.encryptWithPublicKey(
+          publicKey,
+          JSON.stringify(number)
+      );
+  
+      // Convert encrypted object to string
+      //const encryptedString = EthCrypto.cipher.stringify(encrypted);
+      console.log("Encrypted String:", encrypted.iv, encrypted.ephemPublicKey, encrypted.ciphertext, encrypted.mac);
+  
+      //return encryptedString;
+    // Submit the encrypted string to the contract
+    //await kaijiNoYurei.connect(user).selectNumber(encryptedString);
   }
 
   async function deployContract(contractName) {

@@ -11,6 +11,7 @@ contract KaijiNoYurei {
     struct Player {
         uint points;
         bool hasSelectedNumber;
+        bytes selectedNumberEncrypted; 
         uint selectedNumber;
     }
 
@@ -28,7 +29,7 @@ contract KaijiNoYurei {
     event RoundEnded(uint roundNumber);
     event PlayerEliminated(address player);
     event PlayerLostPoints(address player, uint pointsLost);
-    event PlayerSelectedNumber(address player, uint number);
+    event PlayerSelectedNumber(address player);
     event GameWon(address player);
 
     modifier onlyActiveGame() {
@@ -41,7 +42,8 @@ contract KaijiNoYurei {
         require(currentGame.players[msg.sender].points == 0, "Player already joined");
         require(currentGame.playerAddresses.length < PLAYER_LIMIT, "Game is full");
 
-        currentGame.players[msg.sender] = Player(START_POINTS, false, 0);
+        bytes memory newBytes = new bytes(0);
+        currentGame.players[msg.sender] = Player(START_POINTS, false, newBytes, 0);
         currentGame.playerAddresses.push(msg.sender);
     }
 
@@ -68,17 +70,18 @@ contract KaijiNoYurei {
         emit RoundStarted(currentGame.playerAddresses.length);
     }
 
-    function selectNumber(uint number) external onlyActiveGame {
-        require(number >= 0 && number <= 100, "Invalid number");
+    function selectNumber(bytes memory encryptedNumber) external onlyActiveGame {
+        //require(number >= 0 && number <= 100, "Invalid number");
         Player storage player = currentGame.players[msg.sender];
         require(player.points > 0, "Player is eliminated");
         require(!player.hasSelectedNumber, "Number already selected");
         require(block.timestamp <= currentGame.roundStartTime + ROUND_TIME, "Time is up");
         
-        player.selectedNumber = number;
+        //player.selectedNumber = number;
+        player.selectedNumberEncrypted = encryptedNumber;
         player.hasSelectedNumber = true;
 
-        emit PlayerSelectedNumber(msg.sender, number);
+        emit PlayerSelectedNumber(msg.sender);
     }
 
     function processRound() external onlyActiveGame {

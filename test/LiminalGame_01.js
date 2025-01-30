@@ -64,6 +64,9 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       var users = [user1, user2, user3, user4, user5];
 
       await encryptNumberAndSend(user1, 68, owner.address);
+      await encryptNumberAndSend(user1, 12, owner.address);
+      await encryptNumberAndSend(user1, 38, owner.address);
+      await encryptNumberAndSend(user1, 95, owner.address);
 
       //await simulateSelection([1, 1, 1, 68, 100], users, owner);
 
@@ -143,8 +146,14 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       );
   
       // Convert encrypted object to string
-      //const encryptedString = EthCrypto.cipher.stringify(encrypted);
-      console.log("Encrypted String:", encrypted.iv, encrypted.ephemPublicKey, encrypted.ciphertext, encrypted.mac);
+      const encryptedStringified =
+        encrypted.iv + ":" +
+        encrypted.ephemPublicKey + ":" +
+        encrypted.ciphertext + ":" +
+        encrypted.mac;
+
+      //console.log("Encrypted :", encrypted.iv, encrypted.ephemPublicKey, encrypted.ciphertext, encrypted.mac);
+      console.log("Encrypted stringified for number ", number,": ", encryptedStringified);
   
       //return encryptedString;
     // Submit the encrypted string to the contract

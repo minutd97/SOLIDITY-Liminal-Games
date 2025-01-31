@@ -11,13 +11,13 @@ contract LiminalDecryptNumbers is FunctionsClient, ConfirmedOwner {
     bytes32 public s_lastRequestId;
     bytes public s_lastResponse;
     bytes public s_lastError;
-    uint[] public decryptedNumbers;
+    uint[] private decryptedNumbers;
 
     event DecryptionComplete(uint[] decryptedNumbers);
     event Response(bytes32 indexed requestId, bytes response, bytes err);
 
     string source =
-        "const apiUrl = 'https://your-decryption-api.com/decrypt';"
+        "const apiUrl = 'https://paperbacks-antique-tumor-hood.trycloudflare.com/decrypt';"
         "const response = await Functions.makeHttpRequest({"
         "    url: apiUrl,"
         "    method: 'POST',"
@@ -35,8 +35,9 @@ contract LiminalDecryptNumbers is FunctionsClient, ConfirmedOwner {
 
     uint32 gasLimit = 300000;
     bytes32 donID = 0x66756e2d617262697472756d2d7365706f6c69612d3100000000000000000000;
+    address router = 0x234a5fb5Bd614a7AA2FfAB244D603abFA0Ac5C5C;
 
-    constructor(address router) FunctionsClient(router) ConfirmedOwner(msg.sender) {}
+    constructor() FunctionsClient(router) ConfirmedOwner(msg.sender) {}
 
     function sendRequest(
         uint64 subscriptionId,
@@ -69,5 +70,9 @@ contract LiminalDecryptNumbers is FunctionsClient, ConfirmedOwner {
         }
 
         emit DecryptionComplete(numbers);
+    }
+
+    function getDecryptedNumbers() external view returns (uint[] memory) {
+        return decryptedNumbers;
     }
 }

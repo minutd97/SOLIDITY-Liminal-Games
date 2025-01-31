@@ -1,6 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("hardhat-gas-reporter");
 require("hardhat-tracer");
+require("dotenv").config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -17,18 +18,18 @@ module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
-      // forking: {
-      //   url: "https://arb1.arbitrum.io/rpc"
-      // },
+      forking: {
+        url: "https://sepolia-rollup.arbitrum.io/rpc"
+      },
       chainId: 31337 // 0x7A69 hexadecimal
     },
     arbitrumOne: {
       url: 'https://arb1.arbitrum.io/rpc',  // Arbitrum One RPC URL
-      accounts: [`0x1d9673a3f1c469e3ae63daa3659649d282fd11e5e34b95275f2a8276ab29f7d1`]  // Your wallet private key
+      accounts: [`0x${process.env.PRIVATE_KEY}`]
     },
     arbitrumSepolia: {
       url: 'https://sepolia-rollup.arbitrum.io/rpc',  // Arbitrum Sepolia RPC URL
-      accounts: [`0x1d9673a3f1c469e3ae63daa3659649d282fd11e5e34b95275f2a8276ab29f7d1`]  // Your wallet private key
+      accounts: [`0x${process.env.PRIVATE_KEY}`]
     }
   },
   etherscan: {

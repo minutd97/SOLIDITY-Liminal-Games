@@ -3,21 +3,27 @@ const { time } = require("@nomicfoundation/hardhat-network-helpers");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const EthCrypto = require("eth-crypto");
-const { Wallet } = require('ethers');
-const { publicKey } = require("eth-crypto");
-const { Point } = require("@noble/secp256k1");
+const { execSync } = require("child_process");
+require("dotenv").config();
 
 describe("Liminal Test Contracts: KaijiNoYurei", function () {
   
-  let tokenLIM, linimalTreasury, kaijiNoYurei; // kaijiNoYurei = Game contract
+  let tokenLIM, linimalTreasury, kaijiNoYurei, liminalDecryptNumbers; // kaijiNoYurei = Game contract
+  let realOwnerWallet;
 
   async function deployContractsFixture() {
     const [owner, user1, user2, user3, user4, user5, user6] = await ethers.getSigners();
     
-    tokenLIM = await deployContract("LiminalToken");
-    linimalTreasury = await deployContract("LiminalTreasury");
-    kaijiNoYurei = await deployContract("KaijiNoYurei");
-
+    const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545"); // ✅ Local Hardhat Fork
+    realOwnerWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+    
+    tokenLIM = await deployContract("LiminalToken", realOwnerWallet);
+    linimalTreasury = await deployContract("LiminalTreasury", realOwnerWallet);
+    kaijiNoYurei = await deployContract("KaijiNoYurei", realOwnerWallet);
+    liminalDecryptNumbers = await ethers.getContractAt(
+        "LiminalDecryptNumbers",
+        "0x991a5e58661cef902a57bb0f1ab5c08338cb8bba"
+    );
     return { owner, user1, user2, user3, user4, user5, user6 };
   }
 
@@ -27,10 +33,13 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       this.timeout(0); 
       const { owner, user1, user2, user3, user4, user5, user6 } = await loadFixture(deployContractsFixture);
 
-      const addresses = [owner.address, user1.address, user2.address, user3.address, user4.address, user5.address, user6.address];
+      const addresses = [realOwnerWallet.address, user1.address, user2.address, user3.address, user4.address, user5.address, user6.address];
       const names = ["owner", "user1", "user2", "user3", "user4", "user5", "user6"];
 
       logUserAddresses(addresses, names);
+
+      //console.log("DELAY BEGINS!");
+      //await delay(120000);
 
       // await kaijiNoYurei.connect(user1).joinGame();
       // await kaijiNoYurei.connect(user2).joinGame();
@@ -63,10 +72,38 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
 
       var users = [user1, user2, user3, user4, user5];
 
-      await encryptNumberAndSend(user1, 68, owner.address);
-      await encryptNumberAndSend(user1, 12, owner.address);
-      await encryptNumberAndSend(user1, 38, owner.address);
-      await encryptNumberAndSend(user1, 95, owner.address);
+      var encryptedNumbers = [];
+
+      encryptedNumbers.push(await encryptNumberAndSend(user1, 23, realOwnerWallet.address)); //68
+      encryptedNumbers.push(await encryptNumberAndSend(user2, 38, realOwnerWallet.address)); //12
+      //encryptedNumbers.push(await encryptNumberAndSend(user3, 38, realOwnerWallet.address));
+      //encryptedNumbers.push(await encryptNumberAndSend(user4, 95, realOwnerWallet.address));
+
+       // ✅ Simulate Chainlink request (send encrypted numbers)
+      const tx = await liminalDecryptNumbers.connect(realOwnerWallet).sendRequest(
+          225, // Subscription ID
+          encryptedNumbers
+      );
+      await tx.wait();
+      console.log("✅ Chainlink request sent!");
+      
+      await delay(180000);
+
+      // ✅ Log last request ID
+      const lastRequestId = await liminalDecryptNumbers.s_lastRequestId();
+      console.log("📌 Last Request ID:", lastRequestId);
+
+      // ✅ Log last response (should contain decrypted numbers in raw bytes)
+      const lastResponse = await liminalDecryptNumbers.s_lastResponse();
+      console.log("📌 Last Response (Raw Bytes):", lastResponse.toString());
+
+      // ✅ Log last error (if any)
+      const lastError = await liminalDecryptNumbers.s_lastError();
+      console.log("📌 Last Error (if any):", lastError.toString());
+
+      // ✅ Log decrypted numbers (decoded result)
+      const decryptedNumbersArray = await liminalDecryptNumbers.getDecryptedNumbers();
+      console.log("🔢 Decrypted Numbers:", decryptedNumbersArray.map(n => n.toString()));
 
       //await simulateSelection([1, 1, 1, 68, 100], users, owner);
 
@@ -135,13 +172,15 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
 
   async function encryptNumberAndSend(user, number, ownerAddr) {
     
-      const publicKey = EthCrypto.publicKeyByPrivateKey(
-          '0x59c6995e998f97a5a0044966f09453890ac986d28b93a39c2051ff1e6b8c32d3'
-      );
+      // const publicKey = EthCrypto.publicKeyByPrivateKey(
+      //     process.env.PRIVATE_KEY //0x59c6995e998f97a5a0044966f09453890ac986d28b93a39c2051ff1e6b8c32d3 first hardhat wallet
+      // );
+
+      // console.log("Public key:", publicKey);
 
       // Encrypt the number using the uncompressed public key
       const encrypted = await EthCrypto.encryptWithPublicKey(
-          publicKey,
+          "99f74e85df79b14eb353ad7efff991f631bcd6aa831041171299e52084e064ec9cebd62c4067dfe317d08219e6659f465d2a881404790245d0ce747ca49b757b",
           JSON.stringify(number)
       );
   
@@ -154,14 +193,32 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
 
       //console.log("Encrypted :", encrypted.iv, encrypted.ephemPublicKey, encrypted.ciphertext, encrypted.mac);
       console.log("Encrypted stringified for number ", number,": ", encryptedStringified);
+      return encryptedStringified;
   
       //return encryptedString;
     // Submit the encrypted string to the contract
     //await kaijiNoYurei.connect(user).selectNumber(encryptedString);
   }
 
-  async function deployContract(contractName) {
-      const ContractFactory = await ethers.getContractFactory(contractName);
+  async function addConsumerToSubscription(subscriptionId, contractAddress) {
+      console.log(`🔹 Adding contract ${contractAddress} as a consumer to subscription ${subscriptionId}...`);
+
+      try {
+          // ✅ Run the command as a shell process
+          const output = execSync(
+              `npx hardhat functions-sub-add --subscription-id ${subscriptionId} --contract ${contractAddress} --network arbitrumSepolia`,
+              { encoding: "utf-8" } // Ensure output is readable
+          );
+          console.log(output);
+          console.log("✅ Contract added as a consumer to the subscription!");
+      } catch (error) {
+          console.error("❌ Error adding contract to subscription:", error.message);
+          process.exit(1);
+      }
+  }
+
+  async function deployContract(contractName, owner) {
+      const ContractFactory = owner != null ? await ethers.getContractFactory(contractName, owner) : await ethers.getContractFactory(contractName);
       const deployedContract = await ContractFactory.deploy();
       await deployedContract.waitForDeployment();
       console.log(contractName, "deployed to:", deployedContract.target);

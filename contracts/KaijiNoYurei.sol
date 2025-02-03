@@ -3,6 +3,10 @@ pragma solidity ^0.8.20;
 
 import "hardhat/console.sol";
 
+interface IRelayerVerifier {
+    function getDecryptedNumbers(uint256 roundId) external view returns (uint256[] memory);
+}
+
 contract KaijiNoYurei {
     uint constant PLAYER_LIMIT = 5;
     uint constant START_POINTS = 10;
@@ -11,18 +15,20 @@ contract KaijiNoYurei {
     struct Player {
         uint points;
         bool hasSelectedNumber;
-        bytes selectedNumberEncrypted; 
+        string selectedNumberEncrypted; 
         uint selectedNumber;
     }
 
     struct Game {
         bool active;
+        uint roundId;
         uint roundStartTime;
         address[] playerAddresses;
         mapping(address => Player) players;
     }
 
     Game public currentGame;
+    address public relayerVerifier;
 
     event GameStarted();
     event RoundStarted(uint roundNumber);
@@ -31,6 +37,10 @@ contract KaijiNoYurei {
     event PlayerLostPoints(address player, uint pointsLost);
     event PlayerSelectedNumber(address player);
     event GameWon(address player);
+
+    constructor(address _relayerVerifier) {
+        relayerVerifier = _relayerVerifier;
+    }
 
     modifier onlyActiveGame() {
         require(currentGame.active, "No active game");
@@ -42,8 +52,7 @@ contract KaijiNoYurei {
         require(currentGame.players[msg.sender].points == 0, "Player already joined");
         require(currentGame.playerAddresses.length < PLAYER_LIMIT, "Game is full");
 
-        bytes memory newBytes = new bytes(0);
-        currentGame.players[msg.sender] = Player(START_POINTS, false, newBytes, 0);
+        currentGame.players[msg.sender] = Player(START_POINTS, false, "", 0);
         currentGame.playerAddresses.push(msg.sender);
     }
 
@@ -52,32 +61,31 @@ contract KaijiNoYurei {
         require(currentGame.playerAddresses.length == PLAYER_LIMIT, "Not enough players to start the game");
 
         currentGame.active = true;
+        currentGame.roundId = 0;
         emit GameStarted();
     }
 
     function startRound() external onlyActiveGame {
         require(currentGame.roundStartTime == 0, "Previous round not over");
 
-        // Reset selections for the round
         for (uint i = 0; i < currentGame.playerAddresses.length; i++) {
             address playerAddr = currentGame.playerAddresses[i];
             Player storage player = currentGame.players[playerAddr];
             player.hasSelectedNumber = false;
-            player.selectedNumber = 0;
+            //player.selectedNumber = 0;
         }
 
+        currentGame.roundId++;
         currentGame.roundStartTime = block.timestamp;
-        emit RoundStarted(currentGame.playerAddresses.length);
+        emit RoundStarted(currentGame.roundId);
     }
 
-    function selectNumber(bytes memory encryptedNumber) external onlyActiveGame {
-        //require(number >= 0 && number <= 100, "Invalid number");
+    function selectNumber(string memory encryptedNumber) external onlyActiveGame {
         Player storage player = currentGame.players[msg.sender];
         require(player.points > 0, "Player is eliminated");
         require(!player.hasSelectedNumber, "Number already selected");
         require(block.timestamp <= currentGame.roundStartTime + ROUND_TIME, "Time is up");
-        
-        //player.selectedNumber = number;
+
         player.selectedNumberEncrypted = encryptedNumber;
         player.hasSelectedNumber = true;
 
@@ -86,6 +94,8 @@ contract KaijiNoYurei {
 
     function processRound() external onlyActiveGame {
         require(block.timestamp > currentGame.roundStartTime + ROUND_TIME, "Round time not over");
+
+        setNumbersToPlayers();
 
         uint sum = 0;
         uint validSelections = 0;
@@ -154,6 +164,18 @@ contract KaijiNoYurei {
         emit RoundEnded(activePlayers);
         returnPlayerPoints();
         checkForWinner(playerAddresses);
+    }
+
+    function setNumbersToPlayers() internal {
+        uint[] memory decryptedNumbers = IRelayerVerifier(relayerVerifier).getDecryptedNumbers(currentGame.roundId);
+        for (uint i = 0; i < currentGame.playerAddresses.length; i++) {
+            address playerAddr = currentGame.playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.hasSelectedNumber) {
+                player.selectedNumber = decryptedNumbers[i];
+            }
+        }
     }
 
     //PLEASE REMOVE THIS IN PRODUCTION
@@ -385,5 +407,17 @@ contract KaijiNoYurei {
             emit GameWon(playerWonAddress);
         }
         console.log("Game Clear");
+    }
+
+    function getEncryptedNumbers() external view returns (string[] memory) {
+        uint playerCount = currentGame.playerAddresses.length;
+        string[] memory encryptedNumbers = new string[](playerCount);
+
+        for (uint i = 0; i < playerCount; i++) {
+            address playerAddr = currentGame.playerAddresses[i];
+            encryptedNumbers[i] = currentGame.players[playerAddr].selectedNumberEncrypted;
+        }
+
+        return encryptedNumbers;
     }
 }

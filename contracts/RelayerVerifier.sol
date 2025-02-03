@@ -8,33 +8,40 @@ contract RelayerVerifier {
     using ECDSA for bytes32;
 
     address public trustedRelayer;
+    mapping(uint256 => uint256[]) public decryptedNumbersByRound; // Stores decrypted numbers per round
+    mapping(uint256 => bool) public roundProcessed; // Prevents duplicate processing
 
-    event DecryptionVerified(address indexed sender, uint256[] decryptedNumbers);
+    event DecryptionSubmitted(uint256 roundId, uint256[] decryptedNumbers, bytes signature);
+
+    modifier onlyRelayer() {
+        require(msg.sender == trustedRelayer, "Only relayer can submit decryption");
+        _;
+    }
 
     constructor(address _trustedRelayer) {
         trustedRelayer = _trustedRelayer;
     }
 
-    function verifyDecryption(
+    function submitDecryptedNumbers(
+        uint256 roundId,
         uint256[] memory decryptedNumbers,
         bytes memory signature
-    ) external {
-        // Recreate the signed message
-        bytes32 messageHash = keccak256(abi.encodePacked(decryptedNumbers));
+    ) external onlyRelayer {
+        require(!roundProcessed[roundId], "Round already processed");
 
-        // ✅ OpenZeppelin v5.x: Use MessageHashUtils for Ethereum Signed Message Hash
+        // Verify the relayer's signature
+        bytes32 messageHash = keccak256(abi.encodePacked(roundId, decryptedNumbers));
         bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
+        require(ECDSA.recover(ethSignedMessageHash, signature) == trustedRelayer, "Invalid relayer signature");
 
-        // ✅ Verify signature using ECDSA
-        address recoveredSigner = ECDSA.recover(ethSignedMessageHash, signature);
-        require(recoveredSigner == trustedRelayer, "Invalid relayer signature");
+        decryptedNumbersByRound[roundId] = decryptedNumbers;
+        roundProcessed[roundId] = true;
 
-        emit DecryptionVerified(msg.sender, decryptedNumbers);
+        emit DecryptionSubmitted(roundId, decryptedNumbers, signature);
     }
 
-    // Allows updating the trusted relayer
-    function setTrustedRelayer(address _newRelayer) external {
-        require(msg.sender == trustedRelayer, "Only current relayer can update");
-        trustedRelayer = _newRelayer;
+    function getDecryptedNumbers(uint256 roundId) external view returns (uint256[] memory) {
+        require(roundProcessed[roundId], "Decrypted numbers not available yet");
+        return decryptedNumbersByRound[roundId];
     }
 }

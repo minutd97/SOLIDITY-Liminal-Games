@@ -72,7 +72,7 @@ contract KaijiNoYurei {
             address playerAddr = currentGame.playerAddresses[i];
             Player storage player = currentGame.players[playerAddr];
             player.hasSelectedNumber = false;
-            //player.selectedNumber = 0;
+            player.selectedNumberEncrypted = "";
         }
 
         currentGame.roundId++;

@@ -19,7 +19,7 @@ module.exports = {
   networks: {
     hardhat: {
       // forking: {
-      //   url: "https://sepolia-rollup.arbitrum.io/rpc"
+      //   url: "https://arb1.arbitrum.io/rpc"
       // },
       chainId: 31337 // 0x7A69 hexadecimal
     },
@@ -39,8 +39,8 @@ module.exports = {
       artifacts: "./artifacts"
   },
   gasReporter: {
-    enabled: (process.env.REPORT_GAS) ? true : false,
-    currency: 'USD',
-    showTimeSpent: true,
+    enabled: true,
+    currency: "ETH",
+    gasPrice: 0.024, // Set Arbitrum gas price in Gwei
   }
 };

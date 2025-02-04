@@ -44,4 +44,8 @@ contract RelayerVerifier {
         require(roundProcessed[roundId], "Decrypted numbers not available yet");
         return decryptedNumbersByRound[roundId];
     }
+
+    function setTrustedRelayer(address newTrustedRelayer) external onlyRelayer {
+        trustedRelayer = newTrustedRelayer;
+    }
 }

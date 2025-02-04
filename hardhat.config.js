@@ -25,11 +25,11 @@ module.exports = {
     },
     arbitrumOne: {
       url: 'https://arb1.arbitrum.io/rpc',  // Arbitrum One RPC URL
-      accounts: [`0x${process.env.PRIVATE_KEY}`]
+      accounts: [`0x${process.env.MAINNET_PRIVATE_KEY}`]
     },
     arbitrumSepolia: {
       url: 'https://sepolia-rollup.arbitrum.io/rpc',  // Arbitrum Sepolia RPC URL
-      accounts: [`0x${process.env.PRIVATE_KEY}`]
+      accounts: [`0x${process.env.TESTNET_PRIVATE_KEY}`]
     }
   },
   etherscan: {

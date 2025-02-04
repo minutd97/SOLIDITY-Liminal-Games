@@ -15,7 +15,7 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
     const [owner, user1, user2, user3, user4, user5, user6] = await ethers.getSigners();
     
     const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545"); // ✅ Local Hardhat Fork
-    realOwnerWallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+    realOwnerWallet = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
     
     tokenLIM = await deployContract("LiminalToken", realOwnerWallet);
     linimalTreasury = await deployContract("LiminalTreasury", realOwnerWallet);
@@ -173,7 +173,7 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
   async function encryptNumberAndSend(user, number, ownerAddr) {
     
       // const publicKey = EthCrypto.publicKeyByPrivateKey(
-      //     process.env.PRIVATE_KEY //0x59c6995e998f97a5a0044966f09453890ac986d28b93a39c2051ff1e6b8c32d3 first hardhat wallet
+      //     process.env.TESTNET_PRIVATE_KEY //0x59c6995e998f97a5a0044966f09453890ac986d28b93a39c2051ff1e6b8c32d3 first hardhat wallet
       // );
 
       // console.log("Public key:", publicKey);

@@ -31,8 +31,8 @@ contract KaijiNoYurei {
     address public relayerVerifier;
 
     event GameStarted();
-    event RoundStarted(uint roundNumber);
-    event RoundEnded(uint roundNumber);
+    event RoundStarted(uint roundId, uint endTime);
+    event RoundEnded(uint roundId);
     event PlayerEliminated(address player);
     event PlayerLostPoints(address player, uint pointsLost);
     event PlayerSelectedNumber(address player);
@@ -77,7 +77,7 @@ contract KaijiNoYurei {
 
         currentGame.roundId++;
         currentGame.roundStartTime = block.timestamp;
-        emit RoundStarted(currentGame.roundId);
+        emit RoundStarted(currentGame.roundId, currentGame.roundStartTime + ROUND_TIME);
     }
 
     function selectNumber(string memory encryptedNumber) external onlyActiveGame {
@@ -419,5 +419,9 @@ contract KaijiNoYurei {
         }
 
         return encryptedNumbers;
+    }
+
+    function getGameData() external view returns (uint roundId, uint endTime) {
+        return (currentGame.roundId, currentGame.roundStartTime + ROUND_TIME);
     }
 }

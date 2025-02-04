@@ -10,7 +10,7 @@ interface IRelayerVerifier {
 contract KaijiNoYurei {
     uint constant PLAYER_LIMIT = 5;
     uint constant START_POINTS = 10;
-    uint constant ROUND_TIME = 3 minutes;
+    uint constant ROUND_TIME = 1 minutes;
 
     struct Player {
         uint points;
@@ -65,7 +65,7 @@ contract KaijiNoYurei {
         emit GameStarted();
     }
 
-    function startRound() external onlyActiveGame {
+    function startRound() public onlyActiveGame {
         require(currentGame.roundStartTime == 0, "Previous round not over");
 
         for (uint i = 0; i < currentGame.playerAddresses.length; i++) {
@@ -161,9 +161,13 @@ contract KaijiNoYurei {
 
     function endRound(uint activePlayers, address[] memory playerAddresses) internal {
         currentGame.roundStartTime = 0;
-        emit RoundEnded(activePlayers);
         returnPlayerPoints();
-        checkForWinner(playerAddresses);
+
+        emit RoundEnded(activePlayers);
+        
+        bool gameClear = checkForWinner(playerAddresses);
+        if(!gameClear)
+            startRound();
     }
 
     function setNumbersToPlayers() internal {
@@ -379,7 +383,7 @@ contract KaijiNoYurei {
         }
     }
 
-    function checkForWinner(address[] memory playerAddresses) internal {
+    function checkForWinner(address[] memory playerAddresses) internal returns (bool gameClear) {
         //Count how many players still have points
         uint playerCount = 0;
         address playerWonAddress;
@@ -391,7 +395,7 @@ contract KaijiNoYurei {
                 playerCount++;
                 
                 if (playerCount > 1) {  // Exit early if there are still at least 2 players with points
-                    return;
+                    return false;
                 }
                 else { 
                     playerWonAddress = playerAddr;
@@ -407,6 +411,7 @@ contract KaijiNoYurei {
             emit GameWon(playerWonAddress);
         }
         console.log("Game Clear");
+        return true;
     }
 
     function getEncryptedNumbers() external view returns (string[] memory) {

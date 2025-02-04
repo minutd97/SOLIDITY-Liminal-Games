@@ -21,6 +21,10 @@ module.exports = {
       // forking: {
       //   url: "https://arb1.arbitrum.io/rpc"
       // },
+      mining: {
+        auto: true, // ⏳ Automatically mines blocks
+        interval: [1500, 2000] // Mine every 1.5-2 seconds (adjustable)
+      },
       chainId: 31337 // 0x7A69 hexadecimal
     },
     arbitrumOne: {

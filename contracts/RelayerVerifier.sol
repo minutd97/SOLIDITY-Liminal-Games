@@ -8,14 +8,18 @@ contract RelayerVerifier {
     using ECDSA for bytes32;
 
     address public trustedRelayer;
-    mapping(uint256 => uint256[]) public decryptedNumbersByRound; // Stores decrypted numbers per round
-    mapping(uint256 => bool) public roundProcessed; // Prevents duplicate processing
+    mapping(bytes32 => uint[]) public decryptedNumbers; // Stores decrypted numbers using a compact key
+    mapping(bytes32 => bool) public roundProcessed; // Prevents duplicate processing
 
-    event DecryptionSubmitted(uint256 roundId, uint256[] decryptedNumbers, bytes signature);
+    event DecryptionSubmitted(uint gameId, uint roundId, uint[] decryptedNumbers, bytes signature);
 
     modifier onlyRelayer() {
         require(msg.sender == trustedRelayer, "Only relayer can submit decryption");
         _;
+    }
+
+    function getRoundKey(uint gameId, uint roundId) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(gameId, roundId));
     }
 
     constructor(address _trustedRelayer) {
@@ -23,26 +27,29 @@ contract RelayerVerifier {
     }
 
     function submitDecryptedNumbers(
-        uint256 roundId,
-        uint256[] memory decryptedNumbers,
+        uint gameId,
+        uint roundId,
+        uint[] memory decryptedNumbersData,
         bytes memory signature
     ) external onlyRelayer {
-        require(!roundProcessed[roundId], "Round already processed");
+        bytes32 key = getRoundKey(gameId, roundId);
+        require(!roundProcessed[key], "Round already processed");
 
         // Verify the relayer's signature
-        bytes32 messageHash = keccak256(abi.encodePacked(roundId, decryptedNumbers));
+        bytes32 messageHash = keccak256(abi.encodePacked(gameId, roundId, decryptedNumbersData));
         bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(messageHash);
         require(ECDSA.recover(ethSignedMessageHash, signature) == trustedRelayer, "Invalid relayer signature");
 
-        decryptedNumbersByRound[roundId] = decryptedNumbers;
-        roundProcessed[roundId] = true;
+        decryptedNumbers[key] = decryptedNumbersData;
+        roundProcessed[key] = true;
 
-        emit DecryptionSubmitted(roundId, decryptedNumbers, signature);
+        emit DecryptionSubmitted(gameId, roundId, decryptedNumbersData, signature);
     }
 
-    function getDecryptedNumbers(uint256 roundId) external view returns (uint256[] memory) {
-        require(roundProcessed[roundId], "Decrypted numbers not available yet");
-        return decryptedNumbersByRound[roundId];
+    function getDecryptedNumbers(uint gameId, uint roundId) external view returns (uint[] memory) {
+        bytes32 key = getRoundKey(gameId, roundId);
+        require(roundProcessed[key], "Decrypted numbers not available yet");
+        return decryptedNumbers[key];
     }
 
     function setTrustedRelayer(address newTrustedRelayer) external onlyRelayer {

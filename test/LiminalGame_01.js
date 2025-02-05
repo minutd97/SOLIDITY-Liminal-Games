@@ -46,8 +46,10 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       // // Game is full
       // await expect(kaijiNoYurei.connect(user6).joinGame()).to.be.reverted;
 
-      await kaijiNoYurei.connect(owner).startGame();
-      await kaijiNoYurei.connect(owner).startRound();
+      let currentGameID = 1;
+
+      await kaijiNoYurei.connect(owner).startGame(currentGameID);
+      await kaijiNoYurei.connect(owner).startRound(currentGameID);
 
       // // Game already started
       // await expect(kaijiNoYurei.connect(user6).joinGame()).to.be.reverted;
@@ -58,48 +60,48 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
 
       // Scenario 1: Base Rule
       console.log("_____Base Rule");
-      await simulateSelection([30, 40, 50, 60, 70], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [30, 40, 50, 60, 70], users, owner, trustedRelayer);
 
       // Scenario 2: Closest Tie Penalty (Rule 5)
       console.log("_____Closest Tie Penalty");
-      await simulateSelection([34, 50, 50, 60, 70], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [34, 50, 50, 60, 70], users, owner, trustedRelayer);
 
       // Scenario 3: Time’s Up Penalty + Basic rule
       console.log("_____Time’s Up Penalty + Basic rule");
-      await simulateSelection([34, -1, 50, -1, 70], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [34, -1, 50, -1, 70], users, owner, trustedRelayer);
 
       // Scenario 4: Majority Timeout Rule
       console.log("_____Majority Timeout Rule");
-      await simulateSelection([34, -1, -1, -1, 70], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [34, -1, -1, -1, 70], users, owner, trustedRelayer);
 
       // Scenario 5: Closest Tie Penalty + Time’s Up Penalty
       console.log("_____Closest Tie Penalty + Time’s Up Penalty");
-      await simulateSelection([25, 25, -1, -1, 26], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [25, 25, -1, -1, 26], users, owner, trustedRelayer);
 
-      await simulateSelection([25, 20, -1, -1, 26], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [25, 20, -1, -1, 26], users, owner, trustedRelayer);
 
-      await simulateSelection([25, 20, -1, -1, 26], users, owner,trustedRelayer);
+      await simulateSelection(currentGameID, [25, 20, -1, -1, 26], users, owner,trustedRelayer);
 
       // Scenario 6: Exact Match Bonus + Time’s Up Penalty
       console.log("_____Exact Match Bonus + Time’s Up Penalty");
-      await simulateSelection([33, -1, -1, -1, 22], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [33, -1, -1, -1, 22], users, owner, trustedRelayer);
 
-      await simulateSelection([33, 22, -1, -1, 22], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [33, 22, -1, -1, 22], users, owner, trustedRelayer);
 
-      await simulateSelection([33, 22, -1, -1, 22], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [33, 22, -1, -1, 22], users, owner, trustedRelayer);
 
       // Scenario 7: Extreme Bluff Rule
-      await simulateSelection([0, -1, -1, -1, 100], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [0, -1, -1, -1, 100], users, owner, trustedRelayer);
 
-      await simulateSelection([0, -1, -1, -1, 100], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [0, -1, -1, -1, 100], users, owner, trustedRelayer);
 
-      await simulateSelection([0, -1, -1, -1, 100], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [0, -1, -1, -1, 100], users, owner, trustedRelayer);
 
-      await simulateSelection([0, -1, -1, -1, 100], users, owner, trustedRelayer);
+      await simulateSelection(currentGameID, [0, -1, -1, -1, 100], users, owner, trustedRelayer);
     });
   });
 
-  async function simulateSelection(userNumbers, users, owner, trustedRelayer){
+  async function simulateSelection(currentGameID, userNumbers, users, owner, trustedRelayer){
 
     roundID++;
 
@@ -112,27 +114,27 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
     encryptedNumbers.push(await returnEncryptedNumber(userNumbers[4]));
 
     if(userNumbers[0] != -1)
-      await kaijiNoYurei.connect(users[0]).selectNumber(encryptedNumbers[0]);
+      await kaijiNoYurei.connect(users[0]).selectNumber(currentGameID, encryptedNumbers[0]);
     
     if(userNumbers[1] != -1)
-      await kaijiNoYurei.connect(users[1]).selectNumber(encryptedNumbers[1]);
+      await kaijiNoYurei.connect(users[1]).selectNumber(currentGameID, encryptedNumbers[1]);
     
     if(userNumbers[2] != -1)
-      await kaijiNoYurei.connect(users[2]).selectNumber(encryptedNumbers[2]);
+      await kaijiNoYurei.connect(users[2]).selectNumber(currentGameID, encryptedNumbers[2]);
     
     if(userNumbers[3] != -1)
-      await kaijiNoYurei.connect(users[3]).selectNumber(encryptedNumbers[3]);
+      await kaijiNoYurei.connect(users[3]).selectNumber(currentGameID, encryptedNumbers[3]);
     
     if(userNumbers[4] != -1)
-      await kaijiNoYurei.connect(users[4]).selectNumber(encryptedNumbers[4]);
+      await kaijiNoYurei.connect(users[4]).selectNumber(currentGameID, encryptedNumbers[4]);
 
     await increaseTime(180);
 
-    encryptedNumbers = await fetchEncryptedNumbers();
-    const {roundId, decryptedNumbers, signature } = await requestDecryption(roundID, encryptedNumbers);  
-    await submitToRelayerContract(trustedRelayer, roundId, decryptedNumbers, signature);
+    encryptedNumbers = await fetchEncryptedNumbers(currentGameID);
+    const {gameId, roundId, decryptedNumbers, signature } = await requestDecryption(currentGameID, roundID, encryptedNumbers);  
+    await submitToRelayerContract(trustedRelayer, gameId, roundId, decryptedNumbers, signature);
 
-    await kaijiNoYurei.connect(owner).processRound();
+    await kaijiNoYurei.connect(owner).processRound(currentGameID);
   }
 
   async function returnEncryptedNumber(number) {
@@ -159,9 +161,9 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       return encryptedStringified;
   }
 
-  async function fetchEncryptedNumbers() {
+  async function fetchEncryptedNumbers(gameId) {
       try {
-          const encryptedNumbers = await kaijiNoYurei.getEncryptedNumbers();
+          const encryptedNumbers = await kaijiNoYurei.getEncryptedNumbers(gameId);
           //console.log("📩 Encrypted Numbers:", encryptedNumbers);
           return encryptedNumbers;
       } catch (error) {
@@ -170,16 +172,18 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       }
   }
 
-  async function requestDecryption(roundId, encryptedNumbers) {
+  async function requestDecryption(gameId, roundId, encryptedNumbers) {
       try {
           const response = await axios.post(RELAYER_API_URL, {
-              roundId, // 🔹 Include roundId
+              gameId,
+              roundId,
               encryptedDataArray: encryptedNumbers
           });
 
           console.log("📩 API Response:", response.data);
 
           return {
+              gameId: response.data.gameId,
               roundId: response.data.roundId,
               decryptedNumbers: response.data.decryptedNumbers,
               signature: response.data.signature
@@ -190,9 +194,9 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       }
   }
  
-  async function submitToRelayerContract(signer, roundId, decryptedNumbers, signature) {
+  async function submitToRelayerContract(signer, gameId, roundId, decryptedNumbers, signature) {
       try {
-          const tx = await relayerVerifier.connect(signer).submitDecryptedNumbers(roundId, decryptedNumbers, signature);
+          const tx = await relayerVerifier.connect(signer).submitDecryptedNumbers(gameId, roundId, decryptedNumbers, signature);
           await tx.wait();
           console.log("✅ Decryption submitted successfully for round", roundId, "Tx Hash:", tx.hash);
       } catch (error) {

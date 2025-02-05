@@ -4,18 +4,18 @@ pragma solidity ^0.8.20;
 import "hardhat/console.sol";
 
 interface IRelayerVerifier {
-    function getDecryptedNumbers(uint256 roundId) external view returns (uint256[] memory);
+    function getDecryptedNumbers(uint gameId, uint roundId) external view returns (uint[] memory);
 }
 
 contract KaijiNoYurei {
     uint constant PLAYER_LIMIT = 5;
     uint constant START_POINTS = 10;
-    uint constant ROUND_TIME = 1 minutes;
+    uint constant ROUND_TIME = 30 seconds;
 
     struct Player {
         uint points;
         bool hasSelectedNumber;
-        string selectedNumberEncrypted; 
+        string selectedNumberEncrypted;
         uint selectedNumber;
     }
 
@@ -27,85 +27,101 @@ contract KaijiNoYurei {
         mapping(address => Player) players;
     }
 
-    Game public currentGame;
+    uint public gameCounter;
+    mapping(uint => Game) public games;
+    mapping(address => uint) public playerToGame; // Tracks which game a player is in
+
     address public relayerVerifier;
 
-    event GameStarted();
-    event RoundStarted(uint roundId, uint endTime);
-    event RoundEnded(uint roundId);
-    event PlayerEliminated(address player);
-    event PlayerLostPoints(address player, uint pointsLost);
-    event PlayerSelectedNumber(address player);
-    event GameWon(address player);
+    event GameCreated(uint gameId);
+    event GameStarted(uint gameId);
+    event RoundStarted(uint gameId, uint roundId, uint endTime);
+    event RoundEnded(uint gameId, uint roundId);
+    event PlayerJoinedGame(uint gameId, address player);
+    event PlayerSelectedNumber(uint gameId, address player);
+    event PlayerLostPoints(uint gameId, address player, uint pointsLost);
+    event PlayerEliminated(uint gameId, address player);
+    event GameWon(uint gameId, address player);
 
     constructor(address _relayerVerifier) {
         relayerVerifier = _relayerVerifier;
+        createNewGame();
     }
 
-    modifier onlyActiveGame() {
-        require(currentGame.active, "No active game");
+    modifier onlyActiveGame(uint gameId) {
+        require(games[gameId].active, "No active game");
         _;
     }
 
+    function createNewGame() internal {
+        gameCounter++;
+        games[gameCounter].active = false;
+        emit GameCreated(gameCounter);
+    }
+
     function joinGame() external {
-        require(!currentGame.active, "Game already started");
-        require(currentGame.players[msg.sender].points == 0, "Player already joined");
-        require(currentGame.playerAddresses.length < PLAYER_LIMIT, "Game is full");
-
-        currentGame.players[msg.sender] = Player(START_POINTS, false, "", 0);
-        currentGame.playerAddresses.push(msg.sender);
+        uint gameId = getAvailableGame();
+        require(games[gameId].players[msg.sender].points == 0, "Player already joined");
+        require(games[gameId].playerAddresses.length < PLAYER_LIMIT, "Game is full");
+        
+        games[gameId].players[msg.sender] = Player(START_POINTS, false, "", 0);
+        games[gameId].playerAddresses.push(msg.sender);
+        playerToGame[msg.sender] = gameId;
+        emit PlayerJoinedGame(gameId, msg.sender);
     }
 
-    function startGame() external {
-        require(!currentGame.active, "Game already active");
-        require(currentGame.playerAddresses.length == PLAYER_LIMIT, "Not enough players to start the game");
+    function startGame(uint gameId) external {
+        require(!games[gameId].active, "Game already active");
+        require(games[gameId].playerAddresses.length == PLAYER_LIMIT, "Not enough players to start");
 
-        currentGame.active = true;
-        currentGame.roundId = 0;
-        emit GameStarted();
+        games[gameId].active = true;
+        games[gameId].roundId = 0;
+        emit GameStarted(gameId);
+
+        createNewGame(); // Prepare the next available game
     }
 
-    function startRound() public onlyActiveGame {
-        require(currentGame.roundStartTime == 0, "Previous round not over");
-
-        for (uint i = 0; i < currentGame.playerAddresses.length; i++) {
-            address playerAddr = currentGame.playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+    function startRound(uint gameId) public onlyActiveGame(gameId) {
+        require(games[gameId].roundStartTime == 0, "Previous round not over");
+        
+        for (uint i = 0; i < games[gameId].playerAddresses.length; i++) {
+            address playerAddr = games[gameId].playerAddresses[i];
+            Player storage player = games[gameId].players[playerAddr];
             player.hasSelectedNumber = false;
             player.selectedNumberEncrypted = "";
         }
 
-        currentGame.roundId++;
-        currentGame.roundStartTime = block.timestamp;
-        emit RoundStarted(currentGame.roundId, currentGame.roundStartTime + ROUND_TIME);
+        games[gameId].roundId++;
+        games[gameId].roundStartTime = block.timestamp;
+        emit RoundStarted(gameId, games[gameId].roundId, block.timestamp + ROUND_TIME);
     }
 
-    function selectNumber(string memory encryptedNumber) external onlyActiveGame {
-        Player storage player = currentGame.players[msg.sender];
+    function selectNumber(uint gameId, string memory encryptedNumber) external onlyActiveGame(gameId) {
+        Player storage player = games[gameId].players[msg.sender];
         require(player.points > 0, "Player is eliminated");
         require(!player.hasSelectedNumber, "Number already selected");
-        require(block.timestamp <= currentGame.roundStartTime + ROUND_TIME, "Time is up");
+        require(block.timestamp <= games[gameId].roundStartTime + ROUND_TIME, "Time is up");
 
         player.selectedNumberEncrypted = encryptedNumber;
         player.hasSelectedNumber = true;
 
-        emit PlayerSelectedNumber(msg.sender);
+        emit PlayerSelectedNumber(gameId, msg.sender);
     }
 
-    function processRound() external onlyActiveGame {
-        require(block.timestamp > currentGame.roundStartTime + ROUND_TIME, "Round time not over");
+    function processRound(uint gameId) external onlyActiveGame(gameId) {
+        require(block.timestamp > games[gameId].roundStartTime + ROUND_TIME, "Round time not over");
 
-        setNumbersToPlayers();
+        setNumbersToPlayers(gameId);
 
         uint sum = 0;
         uint validSelections = 0;
         uint activePlayers = 0;
-        address[] memory playerAddresses = currentGame.playerAddresses;
+        address[] memory playerAddresses = games[gameId].playerAddresses;
 
         // Count active players and calculate sum for valid selections
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (player.points > 0) {
                 activePlayers++;
@@ -119,8 +135,8 @@ contract KaijiNoYurei {
         // Check timeout conditions
         if (validSelections < activePlayers) {
             // Majority timeout rule
-            if (applyTimeoutPenalty(playerAddresses, activePlayers)){
-                endRound(activePlayers, playerAddresses);
+            if (applyTimeoutPenalty(gameId, playerAddresses, activePlayers)){
+                endRound(gameId);
                 return;
             }          
         }
@@ -133,48 +149,71 @@ contract KaijiNoYurei {
         // Handle rules based on player count
         if(activePlayers <= 3){
             //Exact Match Override: No additional rules applied
-            if (handleExactMatchRule(playerAddresses, targetNumber, precision)) {
-                endRound(activePlayers, playerAddresses);
+            if (handleExactMatchRule(gameId, playerAddresses, targetNumber, precision)) {
+                endRound(gameId);
                 return;
             }
         }
 
         bool baseRuleGetsApplied = true;
         if (activePlayers <= 5){
-            baseRuleGetsApplied = handleClosestTiePenalty(playerAddresses, targetNumber, precision);
+            baseRuleGetsApplied = handleClosestTiePenalty(gameId, playerAddresses, targetNumber, precision);
         }
 
         if (activePlayers <= 2){
             if (baseRuleGetsApplied)
-                baseRuleGetsApplied = handleExtremeBluffRule(playerAddresses);
+                baseRuleGetsApplied = handleExtremeBluffRule(gameId, playerAddresses);
             else
-                handleExtremeBluffRule(playerAddresses);
+                handleExtremeBluffRule(gameId, playerAddresses);
         }
 
         if(baseRuleGetsApplied){
             // Apply Base Rule: Penalize players not closest to target number
-            applyBaseRule(playerAddresses, targetNumber, precision);
+            applyBaseRule(gameId, playerAddresses, targetNumber, precision);
         }
 
-        endRound(activePlayers, playerAddresses);
+        endRound(gameId);
     }
 
-    function endRound(uint activePlayers, address[] memory playerAddresses) internal {
+    function endRound(uint gameId) internal {
+        Game storage currentGame = games[gameId];
         currentGame.roundStartTime = 0;
-        returnPlayerPoints();
+        returnPlayerPoints(gameId);
 
-        emit RoundEnded(activePlayers);
-        
-        bool gameClear = checkForWinner(playerAddresses);
-        if(!gameClear)
-            startRound();
+        emit RoundEnded(gameId, currentGame.roundId);
+        address[] memory playerAddresses = currentGame.playerAddresses;
+
+        // First, count how many players still have points
+        uint playerCount = 0;
+        address playerWonAddress;
+        for (uint i = 0; i < playerAddresses.length; i++) {
+            address playerAddr = playerAddresses[i];
+            Player storage player = currentGame.players[playerAddr];
+
+            if (player.points > 0) {
+                playerCount++;
+                playerWonAddress = playerAddr; // Store last player found
+            }
+        }
+
+        if (playerCount > 1) {
+            startRound(gameId);
+            return;
+        } else if (playerCount == 1) {
+            console.log("Game Won by Player:", playerWonAddress);
+            emit GameWon(gameId, playerWonAddress);
+        } else {
+            console.log("There are no winners for this game");
+        }
+
+        console.log("Game Clear");
     }
 
-    function setNumbersToPlayers() internal {
-        uint[] memory decryptedNumbers = IRelayerVerifier(relayerVerifier).getDecryptedNumbers(currentGame.roundId);
-        for (uint i = 0; i < currentGame.playerAddresses.length; i++) {
-            address playerAddr = currentGame.playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+    function setNumbersToPlayers(uint gameId) internal {
+        uint[] memory decryptedNumbers = IRelayerVerifier(relayerVerifier).getDecryptedNumbers(gameId, games[gameId].roundId);
+        for (uint i = 0; i < games[gameId].playerAddresses.length; i++) {
+            address playerAddr = games[gameId].playerAddresses[i];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (player.hasSelectedNumber) {
                 player.selectedNumber = decryptedNumbers[i];
@@ -183,15 +222,15 @@ contract KaijiNoYurei {
     }
 
     //PLEASE REMOVE THIS IN PRODUCTION
-    function returnPlayerPoints() public view {
-        address[] memory playersAddr = currentGame.playerAddresses;
+    function returnPlayerPoints(uint gameId) public view {
+        address[] memory playersAddr = games[gameId].playerAddresses;
         for (uint i = 0; i < playersAddr.length; i++){
-            console.log("Player", (i + 1), "Points Left:", currentGame.players[playersAddr[i]].points);
+            console.log("Player", (i + 1), "Points Left:", games[gameId].players[playersAddr[i]].points);
         }
     }
 
-    function penalizePlayer(address playerAddr, uint points) internal {
-        Player storage player = currentGame.players[playerAddr];
+    function penalizePlayer(uint gameId, address playerAddr, uint points) internal {
+        Player storage player = games[gameId].players[playerAddr];
         
         if (player.points > 0){
             if (player.points < points){
@@ -201,26 +240,26 @@ contract KaijiNoYurei {
                 player.points -= points;
             }
                 
-            emit PlayerLostPoints(playerAddr, points);
+            emit PlayerLostPoints(gameId, playerAddr, points);
             //console.log("Player Penalized : ", playerAddr, " Points left:", player.points);
 
             if (player.points == 0) {
-                emit PlayerEliminated(playerAddr);
-                console.log("Player Eliminated : ", playerAddr);
+                emit PlayerEliminated(gameId, playerAddr);
+                console.log("Player Eliminated : ", playerAddr, " gameId:", gameId);
             }    
         }
     }
 
-    function applyTimeoutPenalty(address[] memory playerAddresses, uint activePlayers) internal returns(bool) {
+    function applyTimeoutPenalty(uint gameId, address[] memory playerAddresses, uint activePlayers) internal returns(bool) {
         uint timeoutCount = 0;
 
         // Apply timeout penalty
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (!player.hasSelectedNumber && player.points > 0) {
-                penalizePlayer(playerAddr, 2);
+                penalizePlayer(gameId, playerAddr, 2);
                 timeoutCount++;
             }
         }
@@ -238,7 +277,7 @@ contract KaijiNoYurei {
         return false;
     }
 
-    function handleClosestTiePenalty(address[] memory playerAddresses, uint targetNumber, uint precision) internal returns(bool) {
+    function handleClosestTiePenalty(uint gameId, address[] memory playerAddresses, uint targetNumber, uint precision) internal returns(bool) {
         uint closestDifference = type(uint).max;
         address[] memory closestPlayers = new address[](playerAddresses.length);
         uint closestPlayerCount = 0;
@@ -246,7 +285,7 @@ contract KaijiNoYurei {
         // Find closest players
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (player.hasSelectedNumber) {
                 uint scaledDifference = player.selectedNumber * precision > targetNumber
@@ -268,7 +307,7 @@ contract KaijiNoYurei {
             // Penalize all closest players
             for (uint i = 0; i < closestPlayerCount; i++) {
                 address playerAddr = closestPlayers[i];
-                penalizePlayer(playerAddr, 1);
+                penalizePlayer(gameId, playerAddr, 1);
             }
             console.log("Handled Closest Tie Penalty");
             return false;
@@ -278,14 +317,14 @@ contract KaijiNoYurei {
         }
     }
 
-    function handleExactMatchRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal returns (bool) {
+    function handleExactMatchRule(uint gameId, address[] memory playerAddresses, uint targetNumber, uint precision) internal returns (bool) {
         address exactMatchPlayer;
         uint exactMatchCount = 0;
 
         // Find exact matches for the targetNumber
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (player.hasSelectedNumber && player.selectedNumber * precision == targetNumber) {
                 exactMatchPlayer = playerAddr;
@@ -306,10 +345,10 @@ contract KaijiNoYurei {
         // Penalize all other players
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (player.hasSelectedNumber && playerAddr != exactMatchPlayer) {
-                penalizePlayer(playerAddr, 2);
+                penalizePlayer(gameId, playerAddr, 2);
             }
         }
 
@@ -317,13 +356,13 @@ contract KaijiNoYurei {
         return true; // Exact Match Override Rule
     }
 
-    function handleExtremeBluffRule(address[] memory playerAddresses) internal returns (bool) {
+    function handleExtremeBluffRule(uint gameId, address[] memory playerAddresses) internal returns (bool) {
         address zeroPlayer;
         address hundredPlayer;
 
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (player.selectedNumber == 0 && player.hasSelectedNumber) {
                 zeroPlayer = playerAddr;
@@ -335,7 +374,7 @@ contract KaijiNoYurei {
         }
 
         if (zeroPlayer != address(0) && hundredPlayer != address(0)) {
-            penalizePlayer(zeroPlayer, 1);
+            penalizePlayer(gameId, zeroPlayer, 1);
             console.log("Handled Extreme Bluff Rule");
             return false;
         }
@@ -344,7 +383,7 @@ contract KaijiNoYurei {
         }
     }
 
-    function applyBaseRule(address[] memory playerAddresses, uint targetNumber, uint precision) internal {
+    function applyBaseRule(uint gameId, address[] memory playerAddresses, uint targetNumber, uint precision) internal {
         uint closestDifference = type(uint).max;
         address closestPlayer;
         bool foundClosestPlayer = false;
@@ -352,7 +391,7 @@ contract KaijiNoYurei {
         // Identify the closest player to the target number
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (player.hasSelectedNumber) {
                 uint scaledDifference = player.selectedNumber * precision > targetNumber
@@ -370,10 +409,10 @@ contract KaijiNoYurei {
         // Penalize all players that had a valid number except the closest one
         for (uint i = 0; i < playerAddresses.length; i++) {
             address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
+            Player storage player = games[gameId].players[playerAddr];
 
             if (player.points > 0 && playerAddr != closestPlayer && player.hasSelectedNumber) {
-                penalizePlayer(playerAddr, 1);
+                penalizePlayer(gameId, playerAddr, 1);
             }
         }
 
@@ -383,50 +422,28 @@ contract KaijiNoYurei {
         }
     }
 
-    function checkForWinner(address[] memory playerAddresses) internal returns (bool gameClear) {
-        //Count how many players still have points
-        uint playerCount = 0;
-        address playerWonAddress;
-        for (uint i = 0; i < playerAddresses.length; i++) {
-            address playerAddr = playerAddresses[i];
-            Player storage player = currentGame.players[playerAddr];
-
-            if (player.points > 0) {
-                playerCount++;
-                
-                if (playerCount > 1) {  // Exit early if there are still at least 2 players with points
-                    return false;
-                }
-                else { 
-                    playerWonAddress = playerAddr;
-                }
-            }
-        }
-
-        if (playerCount == 0){
-            console.log("There are no winners for this game");
-        }
-        else{
-            console.log("Game Won by Player:", playerWonAddress);
-            emit GameWon(playerWonAddress);
-        }
-        console.log("Game Clear");
-        return true;
-    }
-
-    function getEncryptedNumbers() external view returns (string[] memory) {
-        uint playerCount = currentGame.playerAddresses.length;
+    function getEncryptedNumbers(uint gameId) external view returns (string[] memory) {
+        uint playerCount = games[gameId].playerAddresses.length;
         string[] memory encryptedNumbers = new string[](playerCount);
 
         for (uint i = 0; i < playerCount; i++) {
-            address playerAddr = currentGame.playerAddresses[i];
-            encryptedNumbers[i] = currentGame.players[playerAddr].selectedNumberEncrypted;
+            address playerAddr = games[gameId].playerAddresses[i];
+            encryptedNumbers[i] = games[gameId].players[playerAddr].selectedNumberEncrypted;
         }
 
         return encryptedNumbers;
     }
 
-    function getGameData() external view returns (uint roundId, uint endTime) {
-        return (currentGame.roundId, currentGame.roundStartTime + ROUND_TIME);
+    function getAvailableGame() internal view returns (uint) {
+        for (uint i = 1; i <= gameCounter; i++) {
+            if (!games[i].active && games[i].playerAddresses.length < PLAYER_LIMIT) {
+                return i;
+            }
+        }
+        return gameCounter; // Return the latest game if no open ones
     }
+
+    // function getGameData() external view returns (uint roundId, uint endTime) {
+    //     return (currentGame.roundId, currentGame.roundStartTime + ROUND_TIME);
+    // }
 }

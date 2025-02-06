@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-contract RelayerVerifier {
+contract KNYRelayerVerifier {
     using ECDSA for bytes32;
 
     address public trustedRelayer;

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "hardhat/console.sol";
 
-interface IRelayerVerifier {
+interface IKNYRelayerVerifier {
     function getDecryptedNumbers(uint gameId, uint roundId) external view returns (uint[] memory);
 }
 
@@ -209,7 +209,7 @@ contract KaijiNoYurei {
     }
 
     function setNumbersToPlayers(uint gameId) internal {
-        uint[] memory decryptedNumbers = IRelayerVerifier(relayerVerifier).getDecryptedNumbers(gameId, games[gameId].roundId);
+        uint[] memory decryptedNumbers = IKNYRelayerVerifier(relayerVerifier).getDecryptedNumbers(gameId, games[gameId].roundId);
         for (uint i = 0; i < games[gameId].playerAddresses.length; i++) {
             address playerAddr = games[gameId].playerAddresses[i];
             Player storage player = games[gameId].players[playerAddr];

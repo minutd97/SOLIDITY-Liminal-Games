@@ -10,7 +10,7 @@ const RELAYER_API_URL = "http://localhost:3000/decrypt"; // Adjust if deployed r
 
 describe("Liminal Test Contracts: KaijiNoYurei", function () {
   
-  let tokenLIM, linimalTreasury, kaijiNoYurei, relayerVerifier; // kaijiNoYurei = Game contract
+  let tokenLIM, linimalTreasury, kaijiNoYurei, knyRelayerVerifier;
   let roundID = 0;
 
   async function deployContractsFixture() {
@@ -18,8 +18,8 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
     
     tokenLIM = await deployContract("LiminalToken", owner, []);
     linimalTreasury = await deployContract("LiminalTreasury", owner, []);
-    relayerVerifier = await deployContract("RelayerVerifier", owner, [trustedRelayer.address]);
-    kaijiNoYurei = await deployContract("KaijiNoYurei", owner, [relayerVerifier.getAddress()]);
+    knyRelayerVerifier = await deployContract("KNYRelayerVerifier", owner, [trustedRelayer.address]);
+    kaijiNoYurei = await deployContract("KaijiNoYurei", owner, [knyRelayerVerifier.getAddress()]);
     return { owner, trustedRelayer, user1, user2, user3, user4, user5, user6 };
   }
 
@@ -196,7 +196,7 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
  
   async function submitToRelayerContract(signer, gameId, roundId, decryptedNumbers, signature) {
       try {
-          const tx = await relayerVerifier.connect(signer).submitDecryptedNumbers(gameId, roundId, decryptedNumbers, signature);
+          const tx = await knyRelayerVerifier.connect(signer).submitDecryptedNumbers(gameId, roundId, decryptedNumbers, signature);
           await tx.wait();
           console.log("✅ Decryption submitted successfully for round", roundId, "Tx Hash:", tx.hash);
       } catch (error) {

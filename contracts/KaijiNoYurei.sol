@@ -37,7 +37,7 @@ contract KaijiNoYurei {
     event GameStarted(uint gameId);
     event RoundStarted(uint gameId, uint roundId, uint endTime);
     event RoundEnded(uint gameId, uint roundId);
-    event PlayerJoinedGame(uint gameId, address player);
+    event PlayerJoinedGame(uint gameId, address player, uint playerCount);
     event PlayerSelectedNumber(uint gameId, address player);
     event PlayerLostPoints(uint gameId, address player, uint pointsLost);
     event PlayerEliminated(uint gameId, address player);
@@ -67,7 +67,7 @@ contract KaijiNoYurei {
         games[gameId].players[msg.sender] = Player(START_POINTS, false, "", 0);
         games[gameId].playerAddresses.push(msg.sender);
         playerToGame[msg.sender] = gameId;
-        emit PlayerJoinedGame(gameId, msg.sender);
+        emit PlayerJoinedGame(gameId, msg.sender, games[gameId].playerAddresses.length);
     }
 
     function startGame(uint gameId) external {
@@ -205,7 +205,6 @@ contract KaijiNoYurei {
         } else {
             console.log("There are no winners for this game");
         }
-
         console.log("Game Clear");
     }
 
@@ -441,6 +440,10 @@ contract KaijiNoYurei {
             }
         }
         return gameCounter; // Return the latest game if no open ones
+    }
+
+    function getPlayerGameId(address playerAddress) external view returns (uint){
+        return playerToGame[playerAddress];
     }
 
     // function getGameData() external view returns (uint roundId, uint endTime) {

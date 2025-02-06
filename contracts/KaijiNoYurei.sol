@@ -83,7 +83,7 @@ contract KaijiNoYurei {
 
     function startRound(uint gameId) public onlyActiveGame(gameId) {
         require(games[gameId].roundStartTime == 0, "Previous round not over");
-        
+    
         for (uint i = 0; i < games[gameId].playerAddresses.length; i++) {
             address playerAddr = games[gameId].playerAddresses[i];
             Player storage player = games[gameId].players[playerAddr];
@@ -94,6 +94,7 @@ contract KaijiNoYurei {
         games[gameId].roundId++;
         games[gameId].roundStartTime = block.timestamp;
         emit RoundStarted(gameId, games[gameId].roundId, block.timestamp + ROUND_TIME);
+        console.log("[Solidity] RoundStarted Event Emitted:", gameId, games[gameId].roundId, block.timestamp + ROUND_TIME);
     }
 
     function selectNumber(uint gameId, string memory encryptedNumber) external onlyActiveGame(gameId) {
@@ -196,6 +197,7 @@ contract KaijiNoYurei {
             }
         }
 
+        console.log("Calling end round...");
         if (playerCount > 1) {
             startRound(gameId);
             return;

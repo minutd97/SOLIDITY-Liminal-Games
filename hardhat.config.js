@@ -23,7 +23,7 @@ module.exports = {
       // },
       mining: {
         auto: true, // ⏳ Automatically mines blocks
-        interval: [1500, 2000] // Mine every 1.5-2 seconds (adjustable)
+        interval: [5000, 8000] // ⏳ 5-8 seconds
       },
       chainId: 31337 // 0x7A69 hexadecimal
     },

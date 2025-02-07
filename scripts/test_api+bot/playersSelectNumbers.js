@@ -17,7 +17,7 @@ async function main() {
         const player = [user1, user2, user3, user4, user5][i];
         const encryptedNumber = await encryptNumber(numbers[i]);
 
-        const gameID = await kaijiNoYurei.getPlayerGameId(player.address);
+        const gameID = 1;//await kaijiNoYurei.getPlayerGameId(player.address);
         await kaijiNoYurei.connect(player).selectNumber(gameID, encryptedNumber);
         console.log(`🔐 Player ${i + 1} submitted encrypted number.`);
     }

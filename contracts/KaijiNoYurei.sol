@@ -11,6 +11,7 @@ contract KaijiNoYurei {
     uint constant PLAYER_LIMIT = 5;
     uint constant START_POINTS = 10;
     uint constant ROUND_TIME = 30 seconds;
+    uint constant MAX_GAMES_PER_PLAYER = 5;
 
     struct Player {
         uint points;
@@ -29,7 +30,15 @@ contract KaijiNoYurei {
 
     uint public gameCounter;
     mapping(uint => Game) public games;
-    mapping(address => uint) public playerToGame; // Tracks which game a player is in
+
+    // Tracks games for each player (fixed-size array)
+    mapping(address => uint[5]) public playerToGames;
+
+    // Tracks whether a player is in a game
+    mapping(bytes32 => bool) public isInGame;
+
+    // Tracks number of active games per player
+    mapping(address => uint8) public playerGameCount;
 
     address public relayerVerifier;
 
@@ -48,6 +57,10 @@ contract KaijiNoYurei {
         createNewGame();
     }
 
+    function getPlayerToGameKey(uint gameId, address player) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(gameId, player));
+    }
+
     modifier onlyActiveGame(uint gameId) {
         require(games[gameId].active, "No active game");
         _;
@@ -61,12 +74,13 @@ contract KaijiNoYurei {
 
     function joinGame() external {
         uint gameId = getAvailableGame();
+        require(playerGameCount[msg.sender] < MAX_GAMES_PER_PLAYER, "The maximum game participation limit per player has been reached. Please wait for at least one of the five ongoing games to conclude before attempting to join another.");
         require(games[gameId].players[msg.sender].points == 0, "Player already joined");
         require(games[gameId].playerAddresses.length < PLAYER_LIMIT, "Game is full");
         
         games[gameId].players[msg.sender] = Player(START_POINTS, false, "", 0);
         games[gameId].playerAddresses.push(msg.sender);
-        playerToGame[msg.sender] = gameId;
+        addPlayerToGame(gameId, msg.sender);
         emit PlayerJoinedGame(gameId, msg.sender, games[gameId].playerAddresses.length);
     }
 
@@ -227,27 +241,6 @@ contract KaijiNoYurei {
         address[] memory playersAddr = games[gameId].playerAddresses;
         for (uint i = 0; i < playersAddr.length; i++){
             console.log("Player", (i + 1), "Points Left:", games[gameId].players[playersAddr[i]].points);
-        }
-    }
-
-    function penalizePlayer(uint gameId, address playerAddr, uint points) internal {
-        Player storage player = games[gameId].players[playerAddr];
-        
-        if (player.points > 0){
-            if (player.points < points){
-                player.points = 0;
-            }    
-            else{
-                player.points -= points;
-            }
-                
-            emit PlayerLostPoints(gameId, playerAddr, points);
-            //console.log("Player Penalized : ", playerAddr, " Points left:", player.points);
-
-            if (player.points == 0) {
-                emit PlayerEliminated(gameId, playerAddr);
-                console.log("Player Eliminated : ", playerAddr, " gameId:", gameId);
-            }    
         }
     }
 
@@ -423,6 +416,56 @@ contract KaijiNoYurei {
         }
     }
 
+    function penalizePlayer(uint gameId, address playerAddr, uint points) internal {
+        Player storage player = games[gameId].players[playerAddr];
+        
+        if (player.points > 0){
+            if (player.points < points){
+                player.points = 0;
+            }    
+            else{
+                player.points -= points;
+            }
+                
+            emit PlayerLostPoints(gameId, playerAddr, points);
+            //console.log("Player Penalized : ", playerAddr, " Points left:", player.points);
+
+            if (player.points == 0) {
+                eliminatePlayerFromGame(gameId, playerAddr);
+                emit PlayerEliminated(gameId, playerAddr);
+                console.log("Player Eliminated : ", playerAddr, " gameId:", gameId);
+            }    
+        }
+    }
+
+    function addPlayerToGame(uint gameId, address player) internal {
+        bytes32 key = getPlayerToGameKey(gameId, player);
+        isInGame[key] = true;
+        
+        uint[5] storage playerGames = playerToGames[player];
+        for(uint i = 0; i < playerGames.length; i++){
+            if(playerGames[i] == 0){
+                playerGames[i] = gameId;
+                playerGameCount[player]++;
+                return; // Once we found an empty slot, exit the function
+            }
+        }
+    }
+
+    function eliminatePlayerFromGame(uint gameId, address player) internal {
+        bytes32 key = getPlayerToGameKey(gameId, player);
+        isInGame[key] = false;
+        
+        uint[5] storage playerGames = playerToGames[player];
+        for(uint i = 0; i < playerGames.length; i++){
+            if(playerGames[i] == gameId){
+                playerGames[i] = 0;
+                playerGameCount[player]--;
+                return; // Exit early after removing the player
+            }
+        }
+    }
+
     function getEncryptedNumbers(uint gameId) external view returns (string[] memory) {
         uint playerCount = games[gameId].playerAddresses.length;
         string[] memory encryptedNumbers = new string[](playerCount);
@@ -444,9 +487,14 @@ contract KaijiNoYurei {
         return gameCounter; // Return the latest game if no open ones
     }
 
-    function getPlayerGameId(address playerAddress) external view returns (uint){
-        return playerToGame[playerAddress];
+    function playerInGame(uint gameId, address player) external view returns (bool) {
+        bytes32 key = getPlayerToGameKey(gameId, player);
+        return isInGame[key];
     }
+
+    // function getPlayerGameId(address playerAddress) external view returns (uint){
+    //     return playerToGame[playerAddress];
+    // }
 
     // function getGameData() external view returns (uint roundId, uint endTime) {
     //     return (currentGame.roundId, currentGame.roundStartTime + ROUND_TIME);

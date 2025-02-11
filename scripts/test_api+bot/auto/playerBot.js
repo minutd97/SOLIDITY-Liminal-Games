@@ -82,7 +82,7 @@ async function playerBot() {
             }
 
             // Schedule one execution within 1s - 25s range
-            const delay = Math.floor(Math.random() * (18000 - 1000) + 1000);
+            const delay = Math.floor(Math.random() * (8000 - 1000) + 1000);
             timeoutId = setTimeout(() => {
                 selectNumbers();
                 timeoutId = null; // Reset after execution

@@ -3,7 +3,7 @@ const EthCrypto = require("eth-crypto");
 require("dotenv").config();
 
 async function playerBot() {
-    const provider = new ethers.JsonRpcProvider(process.env.HARDHAT_RPC_URL);
+    const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545/");
     const KAIJI_NO_YUREI = process.env.KAIJI_NO_YUREI;
     const kaijiNoYurei = await ethers.getContractAt("KaijiNoYurei", KAIJI_NO_YUREI);
     

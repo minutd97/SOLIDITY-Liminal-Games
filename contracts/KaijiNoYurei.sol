@@ -51,6 +51,7 @@ contract KaijiNoYurei {
     event PlayerLostPoints(uint gameId, address player, uint pointsLost);
     event PlayerEliminated(uint gameId, address player);
     event GameWon(uint gameId, address player);
+    event GameClear(uint gameId);
 
     constructor(address _relayerVerifier) {
         relayerVerifier = _relayerVerifier;
@@ -222,6 +223,7 @@ contract KaijiNoYurei {
             console.log("There are no winners for this game");
         }
         console.log("Game Clear");
+        emit GameClear(gameId);
     }
 
     function setNumbersToPlayers(uint gameId) internal {

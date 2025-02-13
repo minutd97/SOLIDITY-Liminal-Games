@@ -48,7 +48,7 @@ contract KaijiNoYurei {
     event RoundEnded(uint gameId, uint roundId);
     event PlayerJoinedGame(uint gameId, address player, uint playerCount);
     event PlayerSelectedNumber(uint gameId, address player);
-    event PlayerLostPoints(uint gameId, address player, uint pointsLost);
+    event PlayerLostPoints(uint gameId, address player, uint pointsLeft);
     event PlayerEliminated(uint gameId, address player);
     event GameWon(uint gameId, address player);
     event GameClear(uint gameId);
@@ -429,7 +429,7 @@ contract KaijiNoYurei {
                 player.points -= points;
             }
                 
-            emit PlayerLostPoints(gameId, playerAddr, points);
+            emit PlayerLostPoints(gameId, playerAddr, player.points);
             //console.log("Player Penalized : ", playerAddr, " Points left:", player.points);
 
             if (player.points == 0) {

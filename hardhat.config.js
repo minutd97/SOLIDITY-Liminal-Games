@@ -22,7 +22,7 @@ module.exports = {
       //   url: "https://arb1.arbitrum.io/rpc"
       // },
       mining: {
-        auto: true, // ⏳ Automatically mines blocks
+        auto: false,
         interval: [1500, 2000]
       },
       chainId: 31337 // 0x7A69 hexadecimal

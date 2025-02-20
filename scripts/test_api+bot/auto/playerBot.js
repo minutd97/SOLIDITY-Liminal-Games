@@ -24,7 +24,7 @@ async function playerBot() {
 
     // Join game
     await kaijiNoYurei.connect(wallet).joinGame();
-    console.log(`✅ Player ${wallet.address} joined a game.`);
+    //console.log(`✅ Player ${wallet.address} joined a game.`);
 
     async function selectNumbers() {
         try {
@@ -41,10 +41,10 @@ async function playerBot() {
             const randomNumber = Math.floor(Math.random() * 101);
             const encryptedNumber = await encryptNumber(randomNumber);
 
-            console.log(`🎲 Player ${wallet.address} selecting ${randomNumber} for game ${gameID}...`);
+            //console.log(`🎲 Player ${wallet.address} selecting ${randomNumber} for game ${gameID}...`);
             const tx = await kaijiNoYurei.connect(wallet).selectNumber(gameID, encryptedNumber);
             await tx.wait();
-            console.log(`✅ Player ${wallet.address} successfully selected ${randomNumber}`);
+            console.log(`✅🎲 Player ${wallet.address} successfully selected ${randomNumber}`);
         } catch (error) {
             console.error(`❌ Error selecting number for Player ${wallet.address}:`, error.message);
         }
@@ -90,12 +90,12 @@ async function playerBot() {
                 timeoutId = null; // Reset after execution
             }, delay);
 
-            console.log(`⏳ Player ${wallet.address} will select a number in ${delay / 1000} seconds.`);
+            //console.log(`⏳ Player ${wallet.address} will select a number in ${delay / 1000} seconds.`);
         }
     }
 
     async function waitForNewBlock() {
-        console.log("⏳ Waiting for a new block...");
+        //console.log("⏳ Waiting for a new block...");
         const latestBlock = await provider.getBlockNumber();
     
         return new Promise((resolve) => {
@@ -103,7 +103,7 @@ async function playerBot() {
                 const newBlock = await provider.getBlockNumber();
                 if (newBlock > latestBlock) {
                     clearInterval(interval);
-                    console.log(`✅ New block detected: ${newBlock}`);
+                    //console.log(`✅ New block detected: ${newBlock}`);
                     resolve();
                 }
             }, 1500); // Check every 1.5 seconds

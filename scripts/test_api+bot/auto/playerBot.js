@@ -7,6 +7,8 @@ async function playerBot() {
     const KAIJI_NO_YUREI = process.env.KAIJI_NO_YUREI;
     const kaijiNoYurei = await ethers.getContractAt("KaijiNoYurei", KAIJI_NO_YUREI);
     
+    await waitForNewBlock();
+
     let gameID = null;
     let timeoutId = null; // Track timeout for selecting numbers
 
@@ -90,6 +92,22 @@ async function playerBot() {
 
             console.log(`⏳ Player ${wallet.address} will select a number in ${delay / 1000} seconds.`);
         }
+    }
+
+    async function waitForNewBlock() {
+        console.log("⏳ Waiting for a new block...");
+        const latestBlock = await provider.getBlockNumber();
+    
+        return new Promise((resolve) => {
+            const interval = setInterval(async () => {
+                const newBlock = await provider.getBlockNumber();
+                if (newBlock > latestBlock) {
+                    clearInterval(interval);
+                    console.log(`✅ New block detected: ${newBlock}`);
+                    resolve();
+                }
+            }, 1500); // Check every 1.5 seconds
+        });
     }
 }
 

@@ -489,10 +489,10 @@ contract KaijiNoYurei {
         return gameCounter; // Return the latest game if no open ones
     }
 
-    function playerInGame(uint gameId, address player) external view returns (bool) {
-        bytes32 key = getPlayerToGameKey(gameId, player);
-        return isInGame[key];
-    }
+    // function playerInGame(uint gameId, address player) external view returns (bool) {
+    //     bytes32 key = getPlayerToGameKey(gameId, player);
+    //     return isInGame[key];
+    // }
 
     // function getPlayerGameId(address playerAddress) external view returns (uint){
     //     return playerToGame[playerAddress];

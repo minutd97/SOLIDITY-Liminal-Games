@@ -14,6 +14,7 @@ async function playerBot() {
 
     kaijiNoYurei.on("PlayerJoinedGame", handlePlayerJoined);
     kaijiNoYurei.on("RoundStarted", handleRoundStarted);
+    kaijiNoYurei.on("PlayerEliminated", handlePlayerEliminated);
 
     // Create new player wallet
     const wallet = ethers.Wallet.createRandom().connect(provider);
@@ -33,10 +34,10 @@ async function playerBot() {
                 return;
             }
 
-            let playerInGame = await kaijiNoYurei.playerInGame(gameID, wallet.address);
-            if (playerInGame == false) {
-                return; // The player was eliminated.
-            }
+            // let playerInGame = await kaijiNoYurei.playerInGame(gameID, wallet.address);
+            // if (playerInGame == false) {
+            //     return; // The player was eliminated.
+            // }
 
             const randomNumber = Math.floor(Math.random() * 101);
             const encryptedNumber = await encryptNumber(randomNumber);
@@ -91,6 +92,14 @@ async function playerBot() {
             }, delay);
 
             //console.log(`⏳ Player ${wallet.address} will select a number in ${delay / 1000} seconds.`);
+        }
+    }
+
+    function handlePlayerEliminated(eventGameId, player) {
+        if (player.toLowerCase() == wallet.address.toLowerCase()){
+            kaijiNoYurei.off("PlayerJoinedGame", handlePlayerJoined);
+            kaijiNoYurei.off("RoundStarted", handleRoundStarted);
+            kaijiNoYurei.off("PlayerEliminated", handlePlayerEliminated);
         }
     }
 

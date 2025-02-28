@@ -23,7 +23,7 @@ module.exports = {
       // },
       mining: {
         auto: false,
-        interval: [1500, 2000]
+        interval: [5000, 7000] //[1500, 2000]
       },
       chainId: 31337 // 0x7A69 hexadecimal
     },

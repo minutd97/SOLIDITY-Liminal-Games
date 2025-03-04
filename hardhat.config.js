@@ -18,14 +18,19 @@ module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
-      // forking: {
-      //   url: "https://arb1.arbitrum.io/rpc"
-      // },
+      forking: {
+        url: "https://sepolia-rollup.arbitrum.io/rpc",
+      },
       mining: {
         auto: false,
-        interval: [5000, 7000] //[1500, 2000]
+        interval: [3000, 5000] //[1500, 2000]
       },
       chainId: 31337 // 0x7A69 hexadecimal
+    },
+    anvil: {
+      url: "http://127.0.0.1:8545", // Use Anvil RPC
+      websocket: true, // Ensure WebSockets are enabled
+      chainId: 31337,  // Use same chainId as Hardhat for consistency
     },
     arbitrumOne: {
       url: 'https://arb1.arbitrum.io/rpc',  // Arbitrum One RPC URL

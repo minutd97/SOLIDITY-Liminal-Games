@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "hardhat/console.sol";
+//import "hardhat/console.sol";
 
 interface IKNYRelayerVerifier {
     function getDecryptedNumbers(uint gameId, uint roundId) external view returns (uint[] memory);
+}
+
+interface IKNYBet {
+    function registerGameInBetting(uint gameId) external;
+    function settleBets(uint gameId, address winner) external;
 }
 
 contract KaijiNoYurei {
@@ -34,13 +39,11 @@ contract KaijiNoYurei {
     // Tracks games for each player (fixed-size array)
     mapping(address => uint[5]) public playerToGames;
 
-    // Tracks whether a player is in a game
-    mapping(bytes32 => bool) public isInGame;
-
     // Tracks number of active games per player
     mapping(address => uint8) public playerGameCount;
 
-    address public relayerVerifier;
+    address public immutable relayerVerifier;
+    address public immutable knyBet;
 
     event GameCreated(uint gameId);
     event GameStarted(uint gameId);
@@ -53,14 +56,15 @@ contract KaijiNoYurei {
     event GameWon(uint gameId, address player);
     event GameClear(uint gameId);
 
-    constructor(address _relayerVerifier) {
+    constructor(address _relayerVerifier, address _knyBet) {
         relayerVerifier = _relayerVerifier;
+        knyBet = _knyBet;
         createNewGame();
     }
 
-    function getPlayerToGameKey(uint gameId, address player) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(gameId, player));
-    }
+    // function getPlayerToGameKey(uint gameId, address player) internal pure returns (bytes32) {
+    //     return keccak256(abi.encodePacked(gameId, player));
+    // }
 
     modifier onlyActiveGame(uint gameId) {
         require(games[gameId].active, "No active game");
@@ -91,6 +95,8 @@ contract KaijiNoYurei {
 
         games[gameId].active = true;
         games[gameId].roundId = 0;
+
+        IKNYBet(knyBet).registerGameInBetting(gameId);
         emit GameStarted(gameId);
 
         createNewGame(); // Prepare the next available game
@@ -109,7 +115,6 @@ contract KaijiNoYurei {
         games[gameId].roundId++;
         games[gameId].roundStartTime = block.timestamp;
         emit RoundStarted(gameId, games[gameId].roundId, block.timestamp + ROUND_TIME);
-        console.log("[Solidity] RoundStarted Event Emitted:", gameId, games[gameId].roundId, block.timestamp + ROUND_TIME);
     }
 
     function selectNumber(uint gameId, string memory encryptedNumber) external onlyActiveGame(gameId) {
@@ -160,7 +165,6 @@ contract KaijiNoYurei {
         // Calculate target number with precision
         uint precision = 100; // Scale to 2 decimal places
         uint targetNumber = (sum * 8 * precision) / (10 * validSelections);
-        console.log("Target Number (scaled):", targetNumber);
 
         // Handle rules based on player count
         if(activePlayers <= 3){
@@ -194,7 +198,6 @@ contract KaijiNoYurei {
     function endRound(uint gameId) internal {
         Game storage currentGame = games[gameId];
         currentGame.roundStartTime = 0;
-        returnPlayerPoints(gameId);
 
         emit RoundEnded(gameId, currentGame.roundId);
         address[] memory playerAddresses = currentGame.playerAddresses;
@@ -212,17 +215,16 @@ contract KaijiNoYurei {
             }
         }
 
-        console.log("Calling end round...");
         if (playerCount > 1) {
             startRound(gameId);
             return;
         } else if (playerCount == 1) {
-            console.log("Game Won by Player:", playerWonAddress);
+            IKNYBet(knyBet).settleBets(gameId, playerWonAddress);
             emit GameWon(gameId, playerWonAddress);
         } else {
-            console.log("There are no winners for this game");
+            // No winners for this game
         }
-        console.log("Game Clear");
+
         emit GameClear(gameId);
     }
 
@@ -235,14 +237,6 @@ contract KaijiNoYurei {
             if (player.hasSelectedNumber) {
                 player.selectedNumber = decryptedNumbers[i];
             }
-        }
-    }
-
-    //PLEASE REMOVE THIS IN PRODUCTION
-    function returnPlayerPoints(uint gameId) public view {
-        address[] memory playersAddr = games[gameId].playerAddresses;
-        for (uint i = 0; i < playersAddr.length; i++){
-            console.log("Player", (i + 1), "Points Left:", games[gameId].players[playersAddr[i]].points);
         }
     }
 
@@ -261,13 +255,11 @@ contract KaijiNoYurei {
         }
 
         if(activePlayers == 2){
-            console.log("Majority Timeout Rule applied, 1v1 case");
             return true;
         }
 
         // Apply Majority Timeout Rule
         if (timeoutCount * 100 / activePlayers >= 60) {
-            console.log("Majority Timeout Rule applied");
             return true;
         }
         return false;
@@ -305,7 +297,6 @@ contract KaijiNoYurei {
                 address playerAddr = closestPlayers[i];
                 penalizePlayer(gameId, playerAddr, 1);
             }
-            console.log("Handled Closest Tie Penalty");
             return false;
         }
         else{
@@ -348,7 +339,6 @@ contract KaijiNoYurei {
             }
         }
 
-        console.log("Handled Exact Match Override Rule");
         return true; // Exact Match Override Rule
     }
 
@@ -371,7 +361,6 @@ contract KaijiNoYurei {
 
         if (zeroPlayer != address(0) && hundredPlayer != address(0)) {
             penalizePlayer(gameId, zeroPlayer, 1);
-            console.log("Handled Extreme Bluff Rule");
             return false;
         }
         else{
@@ -382,7 +371,6 @@ contract KaijiNoYurei {
     function applyBaseRule(uint gameId, address[] memory playerAddresses, uint targetNumber, uint precision) internal {
         uint closestDifference = type(uint).max;
         address closestPlayer;
-        bool foundClosestPlayer = false;
 
         // Identify the closest player to the target number
         for (uint i = 0; i < playerAddresses.length; i++) {
@@ -397,7 +385,6 @@ contract KaijiNoYurei {
                 if (scaledDifference < closestDifference) {
                     closestDifference = scaledDifference;
                     closestPlayer = playerAddr;
-                    foundClosestPlayer = true;
                 }
             }
         }
@@ -410,11 +397,6 @@ contract KaijiNoYurei {
             if (player.points > 0 && playerAddr != closestPlayer && player.hasSelectedNumber) {
                 penalizePlayer(gameId, playerAddr, 1);
             }
-        }
-
-        // Emit closest player event for debugging
-        if (foundClosestPlayer) {
-            console.log("BASE RULE, Closest Player:", closestPlayer, "with Difference:", closestDifference);
         }
     }
 
@@ -430,20 +412,15 @@ contract KaijiNoYurei {
             }
                 
             emit PlayerLostPoints(gameId, playerAddr, player.points);
-            //console.log("Player Penalized : ", playerAddr, " Points left:", player.points);
 
             if (player.points == 0) {
                 eliminatePlayerFromGame(gameId, playerAddr);
                 emit PlayerEliminated(gameId, playerAddr);
-                console.log("Player Eliminated : ", playerAddr, " gameId:", gameId);
             }    
         }
     }
 
     function addPlayerToGame(uint gameId, address player) internal {
-        bytes32 key = getPlayerToGameKey(gameId, player);
-        isInGame[key] = true;
-        
         uint[5] storage playerGames = playerToGames[player];
         for(uint i = 0; i < playerGames.length; i++){
             if(playerGames[i] == 0){
@@ -455,9 +432,6 @@ contract KaijiNoYurei {
     }
 
     function eliminatePlayerFromGame(uint gameId, address player) internal {
-        bytes32 key = getPlayerToGameKey(gameId, player);
-        isInGame[key] = false;
-        
         uint[5] storage playerGames = playerToGames[player];
         for(uint i = 0; i < playerGames.length; i++){
             if(playerGames[i] == gameId){

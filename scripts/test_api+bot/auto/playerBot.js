@@ -3,14 +3,17 @@ const EthCrypto = require("eth-crypto");
 require("dotenv").config();
 
 async function playerBot() {
-    const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545/");
+    //const provider = new ethers.WebSocketProvider("ws://127.0.0.1:8545/");
+    const provider = new ethers.WebSocketProvider("ws://127.0.0.1:8545/");
+    provider.pollingInterval = 100;
     const KAIJI_NO_YUREI = process.env.KAIJI_NO_YUREI;
-    const kaijiNoYurei = await ethers.getContractAt("KaijiNoYurei", KAIJI_NO_YUREI);
+    const kaijiNoYurei = await ethers.getContractAt("KaijiNoYurei", KAIJI_NO_YUREI, provider);
     
-    await waitForNewBlock();
+    //await waitForNewBlock();
 
     let gameID = null;
     let timeoutId = null; // Track timeout for selecting numbers
+    let eliminated = false;
 
     kaijiNoYurei.on("PlayerJoinedGame", handlePlayerJoined);
     kaijiNoYurei.on("RoundStarted", handleRoundStarted);
@@ -24,20 +27,20 @@ async function playerBot() {
     await fundWallet(wallet);
 
     // Join game
-    await kaijiNoYurei.connect(wallet).joinGame();
-    //console.log(`✅ Player ${wallet.address} joined a game.`);
+    await kaijiNoYurei.connect(wallet).joinGame(); //const tx = 
+    //const receipt = await tx.wait();
+    //console.log("📜 Transaction Receipt:", receipt);
+    //console.log("📡 Events Emitted:", receipt.events);
 
     async function selectNumbers() {
         try {
+            if (eliminated) // Player get's eliminated, just in case when unsubscribing it will take a moment and the event will still register
+                return;
+
             if (!gameID) {
                 console.warn(`⚠️ Player ${wallet.address} has no assigned game.`);
                 return;
             }
-
-            // let playerInGame = await kaijiNoYurei.playerInGame(gameID, wallet.address);
-            // if (playerInGame == false) {
-            //     return; // The player was eliminated.
-            // }
 
             const randomNumber = Math.floor(Math.random() * 101);
             const encryptedNumber = await encryptNumber(randomNumber);
@@ -58,18 +61,21 @@ async function playerBot() {
     }
 
     async function fundWallet(wallet) {
-        const [funder] = await ethers.getSigners(); // Get Hardhat's default signer
+        const funder = new ethers.Wallet(process.env.HARDHAT_OWNER_PRIVATE_KEY, provider); // Use private key
+    
         const tx = await funder.sendTransaction({
             to: wallet.address,
             value: ethers.parseEther("0.1"),
         });
+    
         await tx.wait();
-    }    
-
+        //console.log(`✅ Wallet ${wallet.address} funded with 0.1 ETH`);
+    }
+    
     // Listen for PlayerJoinedGame event
     function handlePlayerJoined(eventGameId, player, playerCount) {
         if (player.toLowerCase() == wallet.address.toLowerCase()) {
-            gameID = Number(eventGameId);
+            gameID = BigInt(eventGameId);
             console.log(`🎯 Player ${wallet.address} assigned to Game ID: ${gameID}`);
             kaijiNoYurei.off("PlayerJoinedGame", handlePlayerJoined); // Stop listening once found
         }
@@ -85,7 +91,7 @@ async function playerBot() {
             }
 
             // Schedule one execution within 1s - 25s range
-            const delay = Math.floor(Math.random() * (8000 - 1000) + 1000);
+            const delay = 5000;//Math.floor(Math.random() * (8000 - 1000) + 1000);
             timeoutId = setTimeout(() => {
                 selectNumbers();
                 timeoutId = null; // Reset after execution
@@ -97,6 +103,7 @@ async function playerBot() {
 
     function handlePlayerEliminated(eventGameId, player) {
         if (player.toLowerCase() == wallet.address.toLowerCase()){
+            eliminated = true;
             kaijiNoYurei.off("PlayerJoinedGame", handlePlayerJoined);
             kaijiNoYurei.off("RoundStarted", handleRoundStarted);
             kaijiNoYurei.off("PlayerEliminated", handlePlayerEliminated);

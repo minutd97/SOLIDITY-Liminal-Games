@@ -3,14 +3,13 @@ const EthCrypto = require("eth-crypto");
 require("dotenv").config();
 
 async function playerBot() {
-    //const provider = new ethers.WebSocketProvider("ws://127.0.0.1:8545/");
-    const provider = new ethers.WebSocketProvider("ws://127.0.0.1:8545/");
+    //const provider = new ethers.WebSocketProvider(process.env.LOCAL_WS);
+    const provider = new ethers.JsonRpcProvider(process.env.LOCAL_RPC);
     provider.pollingInterval = 100;
+    
     const KAIJI_NO_YUREI = process.env.KAIJI_NO_YUREI;
     const kaijiNoYurei = await ethers.getContractAt("KaijiNoYurei", KAIJI_NO_YUREI, provider);
     
-    //await waitForNewBlock();
-
     let gameID = null;
     let timeoutId = null; // Track timeout for selecting numbers
     let eliminated = false;
@@ -61,7 +60,7 @@ async function playerBot() {
     }
 
     async function fundWallet(wallet) {
-        const funder = new ethers.Wallet(process.env.HARDHAT_OWNER_PRIVATE_KEY, provider); // Use private key
+        const funder = new ethers.Wallet(process.env.HARDHAT_WALLETFUNDER_PRIVATE_KEY, provider); // Use private key
     
         const tx = await funder.sendTransaction({
             to: wallet.address,
@@ -108,22 +107,6 @@ async function playerBot() {
             kaijiNoYurei.off("RoundStarted", handleRoundStarted);
             kaijiNoYurei.off("PlayerEliminated", handlePlayerEliminated);
         }
-    }
-
-    async function waitForNewBlock() {
-        //console.log("⏳ Waiting for a new block...");
-        const latestBlock = await provider.getBlockNumber();
-    
-        return new Promise((resolve) => {
-            const interval = setInterval(async () => {
-                const newBlock = await provider.getBlockNumber();
-                if (newBlock > latestBlock) {
-                    clearInterval(interval);
-                    //console.log(`✅ New block detected: ${newBlock}`);
-                    resolve();
-                }
-            }, 1500); // Check every 1.5 seconds
-        });
     }
 }
 

@@ -6,7 +6,7 @@ async function playerBot() {
     //const provider = new ethers.WebSocketProvider(process.env.LOCAL_WS);
     const provider = new ethers.JsonRpcProvider(process.env.LOCAL_RPC);
     provider.pollingInterval = 100;
-    
+
     const KAIJI_NO_YUREI = process.env.KAIJI_NO_YUREI;
     const kaijiNoYurei = await ethers.getContractAt("KaijiNoYurei", KAIJI_NO_YUREI, provider);
     
@@ -31,7 +31,7 @@ async function playerBot() {
     //console.log("📜 Transaction Receipt:", receipt);
     //console.log("📡 Events Emitted:", receipt.events);
 
-    async function selectNumbers() {
+    async function selectNumber() {
         try {
             if (eliminated) // Player get's eliminated, just in case when unsubscribing it will take a moment and the event will still register
                 return;
@@ -92,7 +92,7 @@ async function playerBot() {
             // Schedule one execution within 1s - 25s range
             const delay = 5000;//Math.floor(Math.random() * (8000 - 1000) + 1000);
             timeoutId = setTimeout(() => {
-                selectNumbers();
+                selectNumber();
                 timeoutId = null; // Reset after execution
             }, delay);
 
@@ -108,6 +108,8 @@ async function playerBot() {
             kaijiNoYurei.off("PlayerEliminated", handlePlayerEliminated);
         }
     }
+
+    return wallet.address;
 }
 
 module.exports = playerBot;

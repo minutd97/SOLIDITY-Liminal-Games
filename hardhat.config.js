@@ -18,12 +18,12 @@ module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
-      forking: {
-        url: "https://sepolia-rollup.arbitrum.io/rpc",
-      },
+      // forking: {
+      //   url: "https://sepolia-rollup.arbitrum.io/rpc",
+      // },
       mining: {
-        auto: false,
-        interval: [3000, 5000] //[1500, 2000]
+        auto: true,
+        interval: [3000, 5000] //3s - 5s
       },
       chainId: 31337 // 0x7A69 hexadecimal
     },

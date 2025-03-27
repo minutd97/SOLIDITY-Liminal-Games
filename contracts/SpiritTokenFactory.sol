@@ -10,8 +10,8 @@ contract SpiritTokenFactory is Ownable {
     uint256 public pegRate; // in wei per SPIRIT (e.g. 0.00004 ETH = 40000000000000 wei)
     uint256 public burnFee; // in basis points (e.g. 100 = 1%)
 
-    uint256 public publicEthReserve;
-    uint256 public collectedEthFees;
+    uint256 public publicProtocolReserve;
+    uint256 public collectedProtocolFees;
 
     uint256 public totalSpiritMinted;
     uint256 public totalSpiritBurned;
@@ -20,7 +20,8 @@ contract SpiritTokenFactory is Ownable {
     event BurnFeeUpdated(uint256 newFee);
     event Minted(address indexed user, uint256 ethIn, uint256 spiritOut);
     event Redeemed(address indexed user, uint256 spiritIn, uint256 ethOut);
-    event TreasuryToppedUp(address indexed sender, uint256 amount);
+    event PublicReserveDeposit(address indexed sender, uint256 amount);
+    event ProtocolFeesCollected(address indexed collector, uint256 amount);
 
     constructor(address _spiritToken, uint256 _pegRate, uint256 _burnFee) Ownable(msg.sender) {
         require(_spiritToken != address(0), "Invalid token address");
@@ -29,7 +30,6 @@ contract SpiritTokenFactory is Ownable {
         burnFee = _burnFee;
     }
 
-    // Owner functions
     function setPegRate(uint256 newRate) external onlyOwner {
         require(newRate > 0, "Rate must be positive");
         pegRate = newRate;
@@ -46,7 +46,7 @@ contract SpiritTokenFactory is Ownable {
     function mintSpirit() external payable {
         require(msg.value > 0, "Send ETH to mint");
         uint256 amountToMint = msg.value * 1e18 / pegRate;
-        publicEthReserve += msg.value;
+        publicProtocolReserve += msg.value;
         totalSpiritMinted += amountToMint;
         
         spirit.mint(msg.sender, amountToMint);
@@ -62,8 +62,8 @@ contract SpiritTokenFactory is Ownable {
 
         require(address(this).balance >= payout, "Insufficient ETH in treasury");
 
-        publicEthReserve -= ethAmount;
-        collectedEthFees += fee;
+        publicProtocolReserve -= ethAmount;
+        collectedProtocolFees += fee;
         totalSpiritBurned += amount;
 
         spirit.burnFrom(msg.sender, amount);
@@ -72,20 +72,22 @@ contract SpiritTokenFactory is Ownable {
         emit Redeemed(msg.sender, amount, payout);
     }
 
+    // Deposit ETH to public reserve
     function depositToPublicReserve() external payable {
         require(msg.value > 0, "Send ETH to deposit");
-        publicEthReserve += msg.value;
-        emit TreasuryToppedUp(msg.sender, msg.value);
+        publicProtocolReserve += msg.value;
+        emit PublicReserveDeposit(msg.sender, msg.value);
     }
 
-    // Withdraw collected fees, only owner
-    function withdrawCollectedFees() external onlyOwner {
-        require(collectedEthFees > 0, "No fees to withdraw");
+    // Collect protocol fees, only owner
+    function collectProtocolFees() external onlyOwner {
+        require(collectedProtocolFees > 0, "No fees to withdraw");
 
-        uint256 amount = collectedEthFees;
-        collectedEthFees = 0;
+        uint256 amount = collectedProtocolFees;
+        collectedProtocolFees = 0;
 
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "ETH transfer failed");
+        emit ProtocolFeesCollected(msg.sender, amount);
     }    
 }

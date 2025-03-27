@@ -81,17 +81,17 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
     expect(factoryBalance).to.equal(expectedFee);
 
     const before = await ethers.provider.getBalance(owner.address);
-    const tx = await factory.connect(owner).withdrawCollectedFees();
+    const tx = await factory.connect(owner).collectProtocolFees();
     const receipt = await tx.wait();
     const gasUsed = receipt.gasUsed * receipt.gasPrice;
     const after = await ethers.provider.getBalance(owner.address);
 
-    const collected = await factory.collectedEthFees();
+    const collected = await factory.collectedProtocolFees();
     expect(collected).to.equal(0);
     expect(after - before + gasUsed).to.be.gt(0); // Owner received fees
 
     await factory.connect(user2).depositToPublicReserve({ value: ethers.parseEther("1") }); // 1 ETH
-    const publicReserve = await factory.publicEthReserve();
+    const publicReserve = await factory.publicProtocolReserve();
     expect(publicReserve).to.equal(ethers.parseEther("1"));
   });
 });

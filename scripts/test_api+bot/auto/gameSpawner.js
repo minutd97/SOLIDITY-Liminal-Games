@@ -28,7 +28,7 @@ async function startSpawningPlayers() {
 
         const nextSpawnTime = 30000; //Math.floor(Math.random() * (180000 - 30000) + 30000); // 30s - 3min
         console.log(`🕒 Next group of 5 players will join in ${nextSpawnTime / 1000} seconds...`);
-        setTimeout(spawnPlayersGroup, nextSpawnTime);
+        //setTimeout(spawnPlayersGroup, nextSpawnTime);
     }
 
     spawnPlayersGroup();

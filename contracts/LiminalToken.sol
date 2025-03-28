@@ -4,15 +4,11 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract LiminalToken is ERC20, Ownable, Pausable, AccessControl {
-  
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+contract LiminalToken is ERC20, Ownable, Pausable {
 
     constructor() ERC20("Liminal Token", "$LIM") Ownable(msg.sender) {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender); // Owner has the admin role by default
-        _mint(msg.sender, 300_000 * 10 ** decimals()); // Mint initial supply to owner
+        _mint(msg.sender, 1_000_000_000 * 10 ** decimals()); // Full supply minted
     }
 
     function pause() public onlyOwner {
@@ -31,19 +27,12 @@ contract LiminalToken is ERC20, Ownable, Pausable, AccessControl {
         return super.transferFrom(_from, _to, _value);
     }
 
-    function mint(address _to, uint256 _amount) public onlyRole(MINTER_ROLE) {
-        _mint(_to, _amount);
+    function burn(uint256 amount) public {
+        _burn(msg.sender, amount);
     }
 
-    function burn(uint256 _amount) public {
-        _burn(msg.sender, _amount);
-    }
-
-    function grantMinterRole(address _account) public onlyOwner {
-        grantRole(MINTER_ROLE, _account);
-    }
-
-    function revokeMinterRole(address _account) public onlyOwner {
-        revokeRole(MINTER_ROLE, _account);
+    function burnFrom(address from, uint256 amount) public {
+        _spendAllowance(from, msg.sender, amount);
+        _burn(from, amount);
     }
 }

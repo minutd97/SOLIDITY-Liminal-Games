@@ -25,6 +25,7 @@ contract LiminalEmissionController is Ownable {
         require(_lim != address(0) && _stakingPool != address(0), "Zero address");
         limToken = IERC20(_lim);
         stakingPool = _stakingPool;
+        lastEmissionTime = block.timestamp + 335 days; // Initial delay of 1 year - 30 days, emit montly after that, before that tokens are locked
     }
 
     function emitMonthlyReward() external onlyOwner {

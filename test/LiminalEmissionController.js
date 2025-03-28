@@ -37,6 +37,7 @@ describe("LiminalEmissionController", function () {
 
   it("should emit monthly reward if time passed", async function () {
     const { controller, pool, lim, owner } = await loadFixture(deployFixture);
+    await time.increase(365 * 24 * 60 * 60); // Fast forward 1 year
 
     const balBefore = await lim.balanceOf(await pool.getAddress());
     expect(balBefore).to.equal(0n);
@@ -55,6 +56,7 @@ describe("LiminalEmissionController", function () {
 
   it("should not allow emission before 30 days", async function () {
     const { controller, owner } = await loadFixture(deployFixture);
+    await time.increase(365 * 24 * 60 * 60); // Fast forward 1 year
 
     await controller.connect(owner).emitMonthlyReward();
     await expect(controller.connect(owner).emitMonthlyReward()).to.be.revertedWith("Emission not ready");
@@ -62,14 +64,15 @@ describe("LiminalEmissionController", function () {
 
   it("should respect TOTAL_EMISSION_CAP", async function () {
     const { controller, owner } = await loadFixture(deployFixture);
-
+    
+    await time.increase(365 * 24 * 60 * 60); // Fast forward 1 year
     const maxEmissions = 32; // 160M / 5M = 32 months
     for (let i = 0; i < maxEmissions; i++) {
-      await time.increase(30 * 24 * 60 * 60);
       await controller.connect(owner).emitMonthlyReward();
+      await time.increase(30 * 24 * 60 * 60);
     }
 
-    await time.increase(30 * 24 * 60 * 60);
+    //await time.increase(30 * 24 * 60 * 60);
     await expect(controller.connect(owner).emitMonthlyReward()).to.be.revertedWith("Emission cap exceeded");
   });
 

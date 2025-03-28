@@ -4,9 +4,11 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract StakingPool is Ownable, ReentrancyGuard {
-    IERC20 public immutable lim;
+contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
+    bytes32 public constant POOL_LOADER_ROLE = keccak256("POOL_LOADER_ROLE");
+    IERC20 public immutable limToken;
 
     uint256 public constant APY = 15; // 15% per year
     uint256 public constant SECONDS_IN_YEAR = 365 days;
@@ -29,12 +31,13 @@ contract StakingPool is Ownable, ReentrancyGuard {
 
     constructor(address _lim) Ownable(msg.sender) {
         require(_lim != address(0), "Invalid LIM address");
-        lim = IERC20(_lim);
+        limToken = IERC20(_lim);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    function loadRewardPool(uint256 amount) external onlyOwner {
+    function loadRewardPool(uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
         require(amount > 0, "Zero amount");
-        require(lim.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        require(limToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
         rewardPool += amount;
         emit RewardLoaded(amount);
     }
@@ -43,7 +46,7 @@ contract StakingPool is Ownable, ReentrancyGuard {
         require(amount > 0, "Invalid amount");
         updateReward(msg.sender);
 
-        require(lim.transferFrom(msg.sender, address(this), amount), "Stake transfer failed");
+        require(limToken.transferFrom(msg.sender, address(this), amount), "Stake transfer failed");
 
         stakes[msg.sender].amount += amount;
         stakes[msg.sender].lastUpdate = block.timestamp;
@@ -59,7 +62,7 @@ contract StakingPool is Ownable, ReentrancyGuard {
         stakes[msg.sender].amount -= amount;
         totalStaked -= amount;
 
-        require(lim.transfer(msg.sender, amount), "Unstake transfer failed");
+        require(limToken.transfer(msg.sender, amount), "Unstake transfer failed");
         emit Unstaked(msg.sender, amount);
     }
 
@@ -72,7 +75,7 @@ contract StakingPool is Ownable, ReentrancyGuard {
         stakes[msg.sender].rewardDebt = 0;
         rewardPool -= reward;
 
-        require(lim.transfer(msg.sender, reward), "Reward transfer failed");
+        require(limToken.transfer(msg.sender, reward), "Reward transfer failed");
         emit Claimed(msg.sender, reward);
     }
 
@@ -96,6 +99,14 @@ contract StakingPool is Ownable, ReentrancyGuard {
         }
 
         return stakeData.rewardDebt + pending;
+    }
+
+    function grantLoaderRole(address account) public onlyOwner {
+        grantRole(POOL_LOADER_ROLE, account);
+    }
+
+    function revokeLoaderRole(address account) public onlyOwner {
+        revokeRole(POOL_LOADER_ROLE, account);
     }
 
     // function drainRewardPool() external onlyOwner {

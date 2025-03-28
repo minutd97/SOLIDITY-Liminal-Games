@@ -10,9 +10,12 @@ describe("Liminal StakingPool Contract", function () {
     const lim = await LiminalToken.deploy();
     await lim.waitForDeployment();
 
-    const StakingPool = await ethers.getContractFactory("StakingPool");
+    const StakingPool = await ethers.getContractFactory("LiminalStakingPool");
     const pool = await StakingPool.deploy(await lim.getAddress());
     await pool.waitForDeployment();
+
+    //Grand loader role to owner
+    await pool.connect(owner).grantLoaderRole(owner.address);
 
     // Owner loads staking pool with 40M LIM
     const preload = ethers.parseUnits("40000000", 18);

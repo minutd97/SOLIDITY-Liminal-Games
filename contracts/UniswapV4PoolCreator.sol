@@ -10,6 +10,7 @@ import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol
 import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
 import {IPoolInitializer_v4} from "@uniswap/v4-periphery/src/interfaces/IPoolInitializer_v4.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IAllowanceTransfer} from "@uniswap/v4-periphery/lib/permit2/src/interfaces/IAllowanceTransfer.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -28,19 +29,6 @@ contract UniswapV4PoolCreator is Ownable {
         poolManager = IPoolManager(_poolManager);
         positionManager = IPositionManager(_positionManager);
         permit2 = IAllowanceTransfer(_permit2);
-    }
-
-    enum Actions {
-        NO_OP,
-        LOCK,
-        UNLOCK,
-        MINT_POSITION,
-        BURN_POSITION,
-        COMPOUND_FEES,
-        STAKE_POSITION,
-        UNSTAKE_POSITION,
-        SETTLE_PAIR,
-        SWEEP
     }
 
     struct PoolInput {
@@ -144,7 +132,7 @@ contract UniswapV4PoolCreator is Ownable {
         params[0] = abi.encodeWithSelector(
             IPoolInitializer_v4.initializePool.selector,
             pool,
-            79228162514264337593543950336
+            input.sqrtPriceX96
         );
 
         bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
@@ -167,15 +155,15 @@ contract UniswapV4PoolCreator is Ownable {
             positionManager.modifyLiquidities.selector, abi.encode(actions, mintParams), deadline
         );
 
-        address erc20Token = Currency.unwrap(currency0) == address(0)
-            ? Currency.unwrap(currency1)
-            : Currency.unwrap(currency0);
+        //address erc20Token = Currency.unwrap(currency0) == address(0)
+        //    ? Currency.unwrap(currency1)
+        //    : Currency.unwrap(currency0);
 
         // approve permit2 as a spender
-        IERC20(erc20Token).approve(address(permit2), type(uint256).max);
+        //IERC20(erc20Token).approve(address(permit2), type(uint256).max);
 
         // approve `PositionManager` as a spender
-        IAllowanceTransfer(address(permit2)).approve(erc20Token, address(positionManager), type(uint160).max, type(uint48).max);
+        //IAllowanceTransfer(address(permit2)).approve(erc20Token, address(positionManager), type(uint160).max, type(uint48).max);
 
         positionManager.multicall{value: msg.value}(params);
     }

@@ -20,8 +20,8 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: "https://arb-mainnet.g.alchemy.com/v2/XNZLa2FrNs3uRaESVLHIb1XrNsUmpMmH",
-        blockNumber: 321922670,
+        url: "https://sepolia-rollup.arbitrum.io/rpc",//"https://arb-mainnet.g.alchemy.com/v2/XNZLa2FrNs3uRaESVLHIb1XrNsUmpMmH",
+        //blockNumber: 321922670,
       },
       chainId: 31337,
       mining: {

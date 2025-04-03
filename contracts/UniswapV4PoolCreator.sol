@@ -43,81 +43,13 @@ contract UniswapV4PoolCreator is Ownable {
         address recipient;
     }
 
-    // function createPoolAndAddLiquidity(PoolInput calldata input) external payable {
-    //     Currency currency0 = input.token0 == address(0)
-    //         ? CurrencyLibrary.ADDRESS_ZERO
-    //         : CurrencyLibrary.fromId(uint160(input.token0));
-
-    //     Currency currency1 = input.token1 == address(0)
-    //         ? CurrencyLibrary.ADDRESS_ZERO
-    //         : CurrencyLibrary.fromId(uint160(input.token1));
-
-    //     require(uint160(Currency.unwrap(currency0)) < uint160(Currency.unwrap(currency1)), "Sort tokens");
-
-    //     PoolKey memory pool = PoolKey({
-    //         currency0: currency0,
-    //         currency1: currency1,
-    //         fee: input.fee,
-    //         tickSpacing: input.tickSpacing,
-    //         hooks: IHooks(address(0))
-    //     });
-
-    //     // First check if the pool is already initialized
-    //     //if (!poolManager.pools(pool.toId()).unlocked) {
-    //         // Initialize pool if not yet initialized
-    //         bytes[] memory initParams = new bytes[](1);
-    //         initParams[0] = abi.encodeWithSelector(
-    //             IPoolInitializer_v4.initializePool.selector,
-    //             pool,
-    //             input.sqrtPriceX96
-    //         );
-
-    //         // Call positionManager.multicall to initialize the pool
-    //         positionManager.multicall{value: 0}(initParams);
-    //     //}
-
-    //     // Now prepare mint action
-    //     bytes memory actions = abi.encodePacked(
-    //         uint8(Actions.MINT_POSITION),
-    //         uint8(Actions.SETTLE_PAIR)
-    //     );
-
-    //     bytes[] memory mintParams = new bytes[](2);
-    //     mintParams[0] = abi.encode(
-    //         pool,
-    //         input.tickLower,
-    //         input.tickUpper,
-    //         input.liquidity,
-    //         type(uint256).max,
-    //         type(uint256).max,
-    //         input.recipient,
-    //         bytes("")
-    //     );
-    //     mintParams[1] = abi.encode(currency0, currency1);
-
-    //     uint256 deadline = block.timestamp + 60;
-
-    //     bytes[] memory callParams = new bytes[](1);
-    //     callParams[0] = abi.encodeWithSelector(
-    //         IPositionManager.modifyLiquidities.selector,
-    //         abi.encode(actions, mintParams),
-    //         deadline
-    //     );
-
-    //     // Send liquidity to the positionManager
-    //     positionManager.multicall{value: msg.value}(callParams);
-    // }
-
     function createPoolAndAddLiquidity(PoolInput calldata input) external payable {
-        Currency currency0 = input.token0 == address(0)
-            ? CurrencyLibrary.ADDRESS_ZERO
-            : CurrencyLibrary.fromId(uint160(input.token0));
+        (address sorted0, address sorted1) = input.token0 < input.token1
+            ? (input.token0, input.token1)
+            : (input.token1, input.token0);
 
-        Currency currency1 = input.token1 == address(0)
-            ? CurrencyLibrary.ADDRESS_ZERO
-            : CurrencyLibrary.fromId(uint160(input.token1));
-
-        require(uint160(Currency.unwrap(currency0)) < uint160(Currency.unwrap(currency1)), "Sort tokens");
+        Currency currency0 = CurrencyLibrary.fromId(uint160(sorted0));
+        Currency currency1 = CurrencyLibrary.fromId(uint160(sorted1));
 
         PoolKey memory pool = PoolKey({
             currency0: currency0,
@@ -127,13 +59,13 @@ contract UniswapV4PoolCreator is Ownable {
             hooks: IHooks(address(0))
         });
 
-        bytes[] memory params = new bytes[](2);
+        bytes[] memory params = new bytes[](1);
 
-        params[0] = abi.encodeWithSelector(
-            IPoolInitializer_v4.initializePool.selector,
-            pool,
-            input.sqrtPriceX96
-        );
+        // params[0] = abi.encodeWithSelector(
+        //     IPoolInitializer_v4.initializePool.selector,
+        //     pool,
+        //     input.sqrtPriceX96
+        // );
 
         bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
 
@@ -151,21 +83,35 @@ contract UniswapV4PoolCreator is Ownable {
         mintParams[1] = abi.encode(pool.currency0, pool.currency1);
 
         uint256 deadline = block.timestamp + 60;
-        params[1] = abi.encodeWithSelector(
+        params[0] = abi.encodeWithSelector(
             positionManager.modifyLiquidities.selector, abi.encode(actions, mintParams), deadline
         );
 
-        //address erc20Token = Currency.unwrap(currency0) == address(0)
-        //    ? Currency.unwrap(currency1)
-        //    : Currency.unwrap(currency0);
-
-        // approve permit2 as a spender
-        //IERC20(erc20Token).approve(address(permit2), type(uint256).max);
-
-        // approve `PositionManager` as a spender
-        //IAllowanceTransfer(address(permit2)).approve(erc20Token, address(positionManager), type(uint160).max, type(uint48).max);
+        console.log("Price:", input.sqrtPriceX96);
+        console.log("liq:", input.liquidity);
+        console.log("Currency0:", Currency.unwrap(pool.currency0));
+        console.log("Currency1:", Currency.unwrap(pool.currency1));
 
         positionManager.multicall{value: msg.value}(params);
+    }
+
+    function initializePoolOnly(PoolInput calldata input) external {
+        (address sorted0, address sorted1) = input.token0 < input.token1
+        ? (input.token0, input.token1)
+        : (input.token1, input.token0);
+
+        Currency currency0 = CurrencyLibrary.fromId(uint160(sorted0));
+        Currency currency1 = CurrencyLibrary.fromId(uint160(sorted1));
+
+        PoolKey memory pool = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: input.fee,
+            tickSpacing: input.tickSpacing,
+            hooks: IHooks(address(0))
+        });
+
+        poolManager.initialize(pool, input.sqrtPriceX96);
     }
 
     function getSqrtPriceX96(uint256 priceToken1PerToken0, uint8 decimalsToken0, uint8 decimalsToken1) public pure returns (uint160) {

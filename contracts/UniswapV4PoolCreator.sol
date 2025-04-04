@@ -12,6 +12,8 @@ import {IPoolInitializer_v4} from "@uniswap/v4-periphery/src/interfaces/IPoolIni
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IAllowanceTransfer} from "@uniswap/v4-periphery/lib/permit2/src/interfaces/IAllowanceTransfer.sol";
+import { LiquidityAmounts } from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
+import { TickMath } from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract UniswapV4PoolCreator is Ownable {
@@ -59,40 +61,80 @@ contract UniswapV4PoolCreator is Ownable {
             hooks: IHooks(address(0))
         });
 
-        bytes[] memory params = new bytes[](1);
+        // // Convert ticks to sqrt ratios
+        // uint160 sqrtRatioAX96 = TickMath.getSqrtPriceAtTick(input.tickLower);
+        // uint160 sqrtRatioBX96 = TickMath.getSqrtPriceAtTick(input.tickUpper);
 
-        // params[0] = abi.encodeWithSelector(
-        //     IPoolInitializer_v4.initializePool.selector,
-        //     pool,
-        //     input.sqrtPriceX96
+        // if (sqrtRatioAX96 > sqrtRatioBX96) {
+        //     (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+        // }
+
+        // Estimate liquidity conservatively
+        uint256 balance0 = IERC20(sorted0).balanceOf(address(this));
+        uint256 balance1 = IERC20(sorted1).balanceOf(address(this));
+
+        // uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
+        //     input.sqrtPriceX96,
+        //     sqrtRatioAX96,
+        //     sqrtRatioBX96,
+        //     balance0,
+        //     balance1
         // );
 
+        // console.log("Calculated liquidity:", liquidity);
+        // console.log("Amount0:", balance0);
+        // console.log("Amount1:", balance1);
+
+        // Transfer tokens directly to PositionManager
+        IERC20(sorted0).transfer(address(positionManager), balance0);
+        IERC20(sorted1).transfer(address(positionManager), balance1);
+
+        uint256 posManagerbalance0 = IERC20(sorted0).balanceOf(address(positionManager));
+        uint256 posManagerbalance1 = IERC20(sorted1).balanceOf(address(positionManager));
+        console.log("posManager Token0 balance:", posManagerbalance0);
+        console.log("posManager Token1 balance:", posManagerbalance1);
+
+        // Setup mint parameters with low minAmount0/1 to avoid revert
         bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
 
         bytes[] memory mintParams = new bytes[](2);
         mintParams[0] = abi.encode(
-            pool, 
-            input.tickLower, 
-            input.tickUpper, 
-            input.liquidity, 
-            type(uint256).max, 
-            type(uint256).max, 
-            input.recipient, 
-            bytes(""));
-
+            pool,
+            input.tickLower,
+            input.tickUpper,
+            input.liquidity,
+            0,
+            0,
+            msg.sender,
+            bytes("")
+        );
         mintParams[1] = abi.encode(pool.currency0, pool.currency1);
 
-        uint256 deadline = block.timestamp + 60;
+        bytes[] memory params = new bytes[](2);
         params[0] = abi.encodeWithSelector(
-            positionManager.modifyLiquidities.selector, abi.encode(actions, mintParams), deadline
+            IPoolInitializer_v4.initializePool.selector,
+            pool,
+            input.sqrtPriceX96
+        );
+        params[1] = abi.encodeWithSelector(
+            positionManager.modifyLiquidities.selector,
+            abi.encode(actions, mintParams),
+            block.timestamp + 120
         );
 
         console.log("Price:", input.sqrtPriceX96);
-        console.log("liq:", input.liquidity);
         console.log("Currency0:", Currency.unwrap(pool.currency0));
         console.log("Currency1:", Currency.unwrap(pool.currency1));
 
-        positionManager.multicall{value: msg.value}(params);
+        positionManager.multicall(params);
+    }
+
+    function setupPermit2Approvals(address token0, address token1) external onlyOwner {
+        IERC20(token0).approve(address(permit2), type(uint256).max);
+        IERC20(token1).approve(address(permit2), type(uint256).max);
+
+        IAllowanceTransfer(address(permit2)).approve(token0, address(positionManager), type(uint160).max, type(uint48).max);
+        IAllowanceTransfer(address(permit2)).approve(token1, address(positionManager), type(uint160).max, type(uint48).max);
     }
 
     function initializePoolOnly(PoolInput calldata input) external {
@@ -114,10 +156,14 @@ contract UniswapV4PoolCreator is Ownable {
         poolManager.initialize(pool, input.sqrtPriceX96);
     }
 
-    function getSqrtPriceX96(uint256 priceToken1PerToken0, uint8 decimalsToken0, uint8 decimalsToken1) public pure returns (uint160) {
-        uint256 adjustedPrice = priceToken1PerToken0 * (10 ** decimalsToken0) / (10 ** decimalsToken1);
-        uint256 sqrt = sqrtUint(adjustedPrice);
-        return uint160(sqrt << 96);
+    function getSqrtPriceX96(uint256 price, uint8 decimals0, uint8 decimals1) public pure returns (uint160) {
+        // Normalize to 1e18 scale
+        uint256 numerator = price * (10 ** decimals0) * 1e18;
+        uint256 denominator = (10 ** decimals1);
+        uint256 ratioX18 = numerator / denominator;
+
+        uint256 sqrtPriceX96 = (sqrtUint(ratioX18) << 96) / 1e9; // shift then scale down
+        return uint160(sqrtPriceX96);
     }
 
     function sqrtUint(uint256 x) internal pure returns (uint256 result) {

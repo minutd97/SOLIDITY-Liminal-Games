@@ -1,4 +1,5 @@
 const { ethers, network } = require("hardhat");
+const { WebSocketProvider } = require("ethers");
 
 const MOCKTOKEN_ADDRESS = "0x845EbEa7A03D1eE7A3ab2C1AA1d93D0aaecfBd35";
 const MOCK_DEPLOYER = "0x179D189A7739d31Ba5a1839E3140958e20f1382e";
@@ -57,9 +58,54 @@ const POOL_MANAGER_ABI = [
           type: "bytes"
         }
       ]
+    },
+    {
+      name: "pools",
+      type: "function",
+      stateMutability: "view",
+      inputs: [
+        {
+          name: "",
+          type: "bytes32"
+        }
+      ],
+      outputs: [
+        {
+          name: "sqrtPriceX96",
+          type: "uint160"
+        },
+        {
+          name: "tick",
+          type: "int24"
+        },
+        {
+          name: "liquidity",
+          type: "uint128"
+        },
+        {
+          name: "protocolFees",
+          type: "tuple",
+          components: [
+            { name: "token0", type: "uint128" },
+            { name: "token1", type: "uint128" }
+          ]
+        },
+        {
+          name: "feeGrowthGlobal0X128",
+          type: "uint256"
+        },
+        {
+          name: "feeGrowthGlobal1X128",
+          type: "uint256"
+        },
+        {
+          name: "locked",
+          type: "bool"
+        }
+      ]
     }
 ];
-
+  
 const POSITION_MANAGER = "0xAc631556d3d4019C95769033B5E719dD77124BAc";
 const PERMIT2_ADDRESS = "0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768";
 const PERMIT2_ABI = [
@@ -81,11 +127,11 @@ async function main() {
     await helper.waitForDeployment();
     console.log("✅ Deployed V4PoolHelper at", helper.target);
 
-    // Deploy helper
-    // const LiminalToken = await ethers.getContractFactory("LiminalToken");
-    // const limToken = await LiminalToken.deploy();
-    // await limToken.waitForDeployment();
-    // console.log("✅ Deployed LiminalToken at", limToken.target);
+    // Deploy LiminalToken
+    const LiminalToken = await ethers.getContractFactory("LiminalToken");
+    const limToken = await LiminalToken.deploy();
+    await limToken.waitForDeployment();
+    console.log("✅ Deployed LiminalToken at", limToken.target);
 
     // Get WETH and MOCK contracts
     //const weth = new ethers.Contract(WETH_ADDRESS, WETH_ABI, owner);
@@ -136,12 +182,12 @@ async function main() {
     //     recipient: owner.address
     // }, { value: ethers.parseEther("1") });
 
-    await helper.setupPermit2Approvals(ethers.ZeroAddress, MOCKTOKEN_ADDRESS);
+    await helper.setupPermit2Approvals(ethers.ZeroAddress, limToken.target);
     console.log("✅ Approved tokens to Permit2");
 
     const poolInput = {
         token0: ethers.ZeroAddress,
-        token1: MOCKTOKEN_ADDRESS,
+        token1: limToken.target,
         amount0: ethers.parseUnits("1", 18), // e.g. 1 ETH
         amount1: ethers.parseUnits("1000", 6), // e.g. 1000 USDC
         fee: 3000,
@@ -152,57 +198,9 @@ async function main() {
       };
 
     const tx = await helper.createPoolAndAddLiquidity(poolInput, { value: ethers.parseEther("1") });
-    await tx.wait();
+    const receipt = await tx.wait();
     console.log("✅ Pool initialized and liquidity added");
-
-    // Step 1: Derive sorted order
-    const [sorted0, sorted1] =
-    ethers.ZeroAddress < MOCKTOKEN_ADDRESS
-    ? [ethers.ZeroAddress, MOCKTOKEN_ADDRESS]
-    : [MOCKTOKEN_ADDRESS, ethers.ZeroAddress];
-
-    // Step 2: Build the PoolKey struct for encoding
-    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
-    const poolKey = {
-    currency0: sorted0,
-    currency1: sorted1,
-    fee: 3000,
-    tickSpacing: 60,
-    hooks: ethers.ZeroAddress
-    };
-
-    // Step 3: Encode the pool key and hash it to get poolId
-    const encodedKey = abiCoder.encode(
-    [
-    "tuple(address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks)"
-    ],
-    [[
-    poolKey.currency0,
-    poolKey.currency1,
-    poolKey.fee,
-    poolKey.tickSpacing,
-    poolKey.hooks
-    ]]
-    );
-
-    const poolId = ethers.keccak256(encodedKey);
-    console.log("🆔 Pool ID:", poolId);
-
-    // Step 4: Connect to PoolManager and query pool state
-    const poolManager = new ethers.Contract(POOL_MANAGER, POOL_MANAGER_ABI, owner);
-    const poolState = await poolManager.pools(poolId);
-    console.log("📊 Pool exists:", poolState.sqrtPriceX96 !== 0n);
-    console.log("🔢 Current sqrtPriceX96:", poolState.sqrtPriceX96.toString());
-
-    // Step 5: Derive pool address and check balances
-    const poolAddress = ethers.getAddress("0x" + poolId.slice(26)); // use last 20 bytes of hash
-    console.log("📦 Pool address (predicted):", poolAddress);
-
-    const reserveETH = await ethers.provider.getBalance(poolAddress);
-    const reserveMOCK = await mock.balanceOf(poolAddress);
-
-    console.log("💰 ETH reserve:", ethers.formatEther(reserveETH));
-    console.log("💰 MOCK reserve:", ethers.formatUnits(reserveMOCK, 6));
+    await listenToPoolEvents(receipt.blockNumber);
 }
 
 // Helper to encode price sqrt
@@ -224,6 +222,47 @@ function sqrt(value) {
     return z;
 }
 
+async function listenToPoolEvents(blockNumber) {
+    const iface = new ethers.Interface([
+      "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
+      "event ModifyLiquidity(bytes32 indexed id, address indexed sender, int24 tickLower, int24 tickUpper, int256 liquidityDelta, bytes32 salt)"
+    ]);
+  
+    const initLogs = await ethers.provider.getLogs({
+      address: POOL_MANAGER,
+      fromBlock: blockNumber,
+      toBlock: blockNumber,
+      topics: [iface.getEvent("Initialize").topicHash]
+    });
+  
+    for (const log of initLogs) {
+      const parsed = iface.parseLog(log);
+      console.log("🆕 Pool Initialized:");
+      console.log("   Pool ID:", parsed.args.id);
+      console.log("   Token0:", parsed.args.currency0);
+      console.log("   Token1:", parsed.args.currency1);
+      console.log("   sqrtPriceX96:", parsed.args.sqrtPriceX96.toString());
+      console.log("   tick:", parsed.args.tick.toString());
+    }
+  
+    const modLogs = await ethers.provider.getLogs({
+      address: POOL_MANAGER,
+      fromBlock: blockNumber,
+      toBlock: blockNumber,
+      topics: [iface.getEvent("ModifyLiquidity").topicHash]
+    });
+  
+    for (const log of modLogs) {
+      const parsed = iface.parseLog(log);
+      console.log("📥 Modify Liquidity:");
+      console.log("   Pool ID:", parsed.args.id);
+      console.log("   Sender:", parsed.args.sender);
+      console.log("   Tick Range:", parsed.args.tickLower, "→", parsed.args.tickUpper);
+      console.log("   Δ Liquidity:", parsed.args.liquidityDelta.toString());
+      console.log("   Salt:", parsed.args.salt);
+    }
+  }
+  
 main().catch((err) => {
     console.error(err);
     process.exit(1);

@@ -74,8 +74,6 @@ const PERMIT2_ABI = [
 const MAX_UINT160 = BigInt("0xffffffffffffffffffffffffffffffffffffffff");
 const MAX_UINT48 = BigInt("0xffffffffffff");
 
-let sqrtPriceX96 = BigInt("2505414483696303623581886281350"); // corresponds to 1 WETH = 1000 MOCK
-
 async function main() {
   await network.provider.send("hardhat_reset", [{
     forking: {
@@ -109,6 +107,8 @@ async function main() {
   const mockAmount = ethers.parseUnits("1000000", 18);
   await (await weth.connect(owner).transfer(POSITION_MANAGER, wethAmount)).wait();
   await (await mock.connect(owner).transfer(POSITION_MANAGER, mockAmount)).wait();
+  console.log(`PoolCreator MOCK balance: ${ethers.formatUnits(await mock.balanceOf(POSITION_MANAGER), 18)}`);
+  console.log(`PoolCreator WETH balance: ${ethers.formatUnits(await weth.balanceOf(POSITION_MANAGER), 18)}`);
   console.log("✅ Transferred WETH + MOCK to PositionManager");
 
   // 5. Prepare contract instances
@@ -137,6 +137,7 @@ async function main() {
   const liquidity = ethers.parseUnits("1", 18); // 1 liquidity unit
   const amount0Max = ethers.parseUnits("1000000", 18);
   const amount1Max = ethers.parseUnits("100", 18);
+  const sqrtPriceX96 = encodePriceSqrt(1, 1000); // 1 WETH = 1000 MOCK
   const hookData = "0x"; // No hook data
   const deadline = Math.floor(Date.now() / 1000) + 60;
   const hooks = ethers.ZeroAddress;
@@ -155,16 +156,15 @@ async function main() {
     hooks
   };
 
-  const poolId = keccak256(abiCoder.encode(
-    ["address", "address", "uint24", "int24", "address"],
-    [currency0, currency1, fee, tickSpacing, hooks]
-  ));
-  console.log("PoolId:", poolId);
+  // const poolId = keccak256(abiCoder.encode(
+  //   ["address", "address", "uint24", "int24", "address"],
+  //   [currency0, currency1, fee, tickSpacing, hooks]
+  // ));
+  // console.log("PoolId:", poolId);
 
-  //console.log("sqrtPriceX96 before:", sqrtPriceX96);
-  console.log("PoolKey:", poolKey);
-  sqrtPriceX96 = encodePriceSqrt(1, 1000); // 1 WETH = 1000 MOCK
-  console.log("sqrtPriceX96 after encodePriceSqrt:", sqrtPriceX96);
+  // //console.log("sqrtPriceX96 before:", sqrtPriceX96);
+  // console.log("PoolKey:", poolKey);
+  // console.log("sqrtPriceX96 after encodePriceSqrt:", sqrtPriceX96);
 
   // 3. Try to initialize the pool (it may already be initialized)
   try {
@@ -188,9 +188,6 @@ async function main() {
   }
 
   // 4. Prepare modifyLiquidities parameters
-  //const MINT_POSITION = 0;
-  //const SETTLE_PAIR = 1;
-
   // Make sure the actions encoding is correct
   const actions = "0x" + MINT_POSITION.toString(16).padStart(2, '0') + SETTLE_PAIR.toString(16).padStart(2, '0');
   console.log("Actions:", actions);
@@ -236,8 +233,10 @@ async function main() {
   console.log("Calling modifyLiquidities...");
   try {
     //const deadline = Math.floor(Date.now() / 1000) + 60 * 10; // 10 minutes from now
-    const modifyTx = await positionManager.modifyLiquidities(encodedPayload, deadline);
-    await modifyTx.wait();
+    //const modifyTx = await positionManager.modifyLiquidities(encodedPayload, deadline);
+    //await modifyTx.wait();
+    const unlockTx = await positionManager.unlock(encodedPayload);
+    await unlockTx.wait();
     console.log("✅ Liquidity added successfully!");
   } catch (error) {
     console.error("Failed to modify liquidity:", error);

@@ -2,18 +2,28 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "hardhat/console.sol";
+
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
+import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 
-contract V4PoolHelper is Ownable {
+contract V4PoolHelper is Ownable, IUnlockCallback {
     using CurrencyLibrary for Currency;
 
     IPoolManager public immutable poolManager;
+
+    PoolKey private currentKey;
+    int24 private tickLower;
+    int24 private tickUpper;
+    uint128 private liquidity;
+    address private recipient;
 
     constructor(address _poolManager) Ownable(msg.sender) {
         poolManager = IPoolManager(_poolManager);
@@ -31,14 +41,19 @@ contract V4PoolHelper is Ownable {
     }
 
     function initializeAndAddLiquidity(PoolParams calldata input) external {
-        (address sorted0, address sorted1) = input.token0 < input.token1
+        bool isCorrectOrder = input.token0 < input.token1;
+        (address sorted0, address sorted1) = isCorrectOrder
             ? (input.token0, input.token1)
             : (input.token1, input.token0);
+
+        console.log("Sorted Order:");
+        console.log("Currency0 (should be lesser):", sorted0);
+        console.log("Currency1:", sorted1);
 
         Currency currency0 = CurrencyLibrary.fromId(uint160(sorted0));
         Currency currency1 = CurrencyLibrary.fromId(uint160(sorted1));
 
-        PoolKey memory key = PoolKey({
+        currentKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
             fee: input.fee,
@@ -46,21 +61,20 @@ contract V4PoolHelper is Ownable {
             hooks: IHooks(address(0))
         });
 
-        // 1. Initialize the pool
-        poolManager.initialize(key, input.sqrtPriceX96);
+        tickLower = input.tickLower;
+        tickUpper = input.tickUpper;
+        recipient = input.recipient;
 
-        // 2. Estimate liquidity from current balances
         uint256 amount0 = IERC20(sorted0).balanceOf(address(this));
         uint256 amount1 = IERC20(sorted1).balanceOf(address(this));
 
-        uint160 sqrtRatioAX96 = TickMath.getSqrtPriceAtTick(input.tickLower);
-        uint160 sqrtRatioBX96 = TickMath.getSqrtPriceAtTick(input.tickUpper);
-
+        uint160 sqrtRatioAX96 = TickMath.getSqrtPriceAtTick(tickLower);
+        uint160 sqrtRatioBX96 = TickMath.getSqrtPriceAtTick(tickUpper);
         if (sqrtRatioAX96 > sqrtRatioBX96) {
             (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
         }
 
-        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
+        liquidity = LiquidityAmounts.getLiquidityForAmounts(
             input.sqrtPriceX96,
             sqrtRatioAX96,
             sqrtRatioBX96,
@@ -68,13 +82,45 @@ contract V4PoolHelper is Ownable {
             amount1
         );
 
-        // 3. Approve token transfers to the poolManager
+        console.log("Calculated liquidity:", liquidity);
+        console.log("Amount0 to transfer:", amount0);
+        console.log("Amount1 to transfer:", amount1);
+
+        poolManager.sync(currency0);
+        poolManager.sync(currency1);
+
         IERC20(sorted0).transfer(address(poolManager), amount0);
         IERC20(sorted1).transfer(address(poolManager), amount1);
 
-        // 4. Call unlock via a delegate contract that executes add liquidity logic (not shown here)
-        // In production, this contract should implement IUnlockCallback and settle deltas properly
-        revert("Add liquidity logic needs to be implemented via unlockCallback.");
+        console.log("Calling initialize on pool manager...");
+        poolManager.initialize(currentKey, input.sqrtPriceX96);
+
+        console.log("Calling unlock on pool manager...");
+        poolManager.unlock(abi.encode("addLiquidity"));
+    }
+
+    function unlockCallback(bytes calldata) external override returns (bytes memory) {
+        require(msg.sender == address(poolManager), "Only PoolManager can call");
+
+        console.log("Inside unlockCallback()");
+        console.log("Liquidity to add:", liquidity);
+
+        // ✅ Settle both currencies before using them
+        poolManager.settleFor(address(this));
+
+        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
+            currentKey,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: tickLower,
+                tickUpper: tickUpper,
+                liquidityDelta: int256(int128(liquidity)),
+                salt: keccak256("lmnl-v4-helper")
+            }),
+            ""
+        );
+
+        console.log("modifyLiquidity executed inside unlockCallback()");
+        return abi.encode(delta);
     }
 
     function transferTokensIn(address token0, address token1) external onlyOwner {

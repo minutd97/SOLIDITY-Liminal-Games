@@ -1,15 +1,63 @@
 const { ethers, network } = require("hardhat");
 
-const HELPER_ADDRESS = "YOUR_DEPLOYED_HELPER_CONTRACT_ADDRESS";
 const MOCKTOKEN_ADDRESS = "0x845EbEa7A03D1eE7A3ab2C1AA1d93D0aaecfBd35";
 const MOCK_DEPLOYER = "0x179D189A7739d31Ba5a1839E3140958e20f1382e";
-const WETH_ADDRESS = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73";
+const WETH_ADDRESS = "0x980B62Da83eFf3D4576C647993b0c1D7faf17c73"; //"0x82aF49447D8a07e3bd95BD0d56f35241523fBab1";
 
 const WETH_ABI = [
   "function deposit() public payable",
   "function approve(address spender, uint256 amount) public returns (bool)",
   "function transfer(address recipient, uint256 amount) external returns (bool)",
   "function balanceOf(address account) external view returns (uint256)"
+];
+
+const POOL_MANAGER = "0xFB3e0C6F74eB1a21CC1Da29aeC80D2Dfe6C9a317"; //"0x360e68faccca8ca495c1b759fd9eee466db9fb32";
+const POOL_MANAGER_ABI = [
+    {
+      name: "initialize",
+      type: "function",
+      stateMutability: "nonpayable",
+      inputs: [
+        {
+          name: "key",
+          type: "tuple",
+          components: [
+            { name: "currency0", type: "address" },
+            { name: "currency1", type: "address" },
+            { name: "fee", type: "uint24" },
+            { name: "tickSpacing", type: "int24" },
+            { name: "hooks", type: "address" }
+          ]
+        },
+        {
+          name: "sqrtPriceX96",
+          type: "uint160"
+        }
+      ],
+      outputs: [
+        {
+          name: "tick",
+          type: "int24"
+        }
+      ]
+    },
+    {
+      name: "unlock",
+      type: "function",
+      stateMutability: "nonpayable",
+      inputs: [
+        {
+          name: "data",
+          type: "bytes"
+        }
+      ],
+      outputs: [
+        {
+          name: "result",
+          type: "bytes"
+        }
+      ]
+    }
 ];
 
 async function main() {
@@ -39,7 +87,7 @@ async function main() {
 
   // Deploy helper
   const Helper = await ethers.getContractFactory("V4PoolHelper");
-  const helper = await Helper.deploy("0xFB3e0C6F74eB1a21CC1Da29aeC80D2Dfe6C9a317"); // PoolManager
+  const helper = await Helper.deploy(POOL_MANAGER);
   await helper.waitForDeployment();
   console.log("✅ Deployed V4PoolHelper at", helper.target);
 
@@ -64,7 +112,7 @@ async function main() {
   });
 
   await tx.wait();
-  console.log("✅ Pool init call finished (may revert at unlock step as expected)");
+  console.log("✅ Pool initialized and liquidity added");
 }
 
 // Helper to encode price sqrt

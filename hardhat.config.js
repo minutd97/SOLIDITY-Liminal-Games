@@ -53,13 +53,10 @@ module.exports = {
     gasPrice: 0.024,
   },
 
-  // // ✅ Aliases for internal v4-periphery Permit2 files
-  // paths: {
-  //   sources: "./contracts",
-  // },
-  // moduleAlias: {
-  //   aliases: {
-  //     "permit2": path.resolve(__dirname, "node_modules/@uniswap/v4-periphery/lib/permit2/src"),
-  //   },
-  // },
+  mocha: {
+    bail: true,
+    timeout: 0,
+  },
+
+  tracing: true,
 };

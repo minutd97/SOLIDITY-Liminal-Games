@@ -5,42 +5,47 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IPositionManager} from "@uniswap/v4-periphery/src/interfaces/IPositionManager.sol";
+import {IPoolInitializer_v4} from "@uniswap/v4-periphery/src/interfaces/IPoolInitializer_v4.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
+import {IAllowanceTransfer} from "@uniswap/v4-periphery/lib/permit2/src/interfaces/IAllowanceTransfer.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
-import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract V4PoolHelper is Ownable, IUnlockCallback {
+contract V4PoolHelper is Ownable {
     using CurrencyLibrary for Currency;
 
     IPoolManager public immutable poolManager;
+    IPositionManager public immutable positionManager;
+    IAllowanceTransfer public immutable permit2;
 
-    PoolKey private currentKey;
-    int24 private tickLower;
-    int24 private tickUpper;
-    uint128 private liquidity;
-    address private recipient;
-
-    constructor(address _poolManager) Ownable(msg.sender) {
+    constructor(
+        address _poolManager,
+        address _positionManager,
+        address _permit2
+    ) Ownable(msg.sender) {
         poolManager = IPoolManager(_poolManager);
+        positionManager = IPositionManager(_positionManager);
+        permit2 = IAllowanceTransfer(_permit2);
     }
 
-    struct PoolParams {
+    struct PoolInput {
         address token0;
         address token1;
+        uint256 amount0;
+        uint256 amount1;
         uint24 fee;
         int24 tickSpacing;
-        uint160 sqrtPriceX96;
         int24 tickLower;
         int24 tickUpper;
         address recipient;
     }
 
-    function initializeAndAddLiquidity(PoolParams calldata input) external {
+    function createPoolAndAddLiquidity(PoolInput calldata input) external payable {
         bool isCorrectOrder = input.token0 < input.token1;
         (address sorted0, address sorted1) = isCorrectOrder
             ? (input.token0, input.token1)
@@ -53,7 +58,7 @@ contract V4PoolHelper is Ownable, IUnlockCallback {
         Currency currency0 = CurrencyLibrary.fromId(uint160(sorted0));
         Currency currency1 = CurrencyLibrary.fromId(uint160(sorted1));
 
-        currentKey = PoolKey({
+        PoolKey memory pool = PoolKey({
             currency0: currency0,
             currency1: currency1,
             fee: input.fee,
@@ -61,70 +66,126 @@ contract V4PoolHelper is Ownable, IUnlockCallback {
             hooks: IHooks(address(0))
         });
 
-        tickLower = input.tickLower;
-        tickUpper = input.tickUpper;
-        recipient = input.recipient;
+        uint160 sqrtPriceX96 = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);
 
-        uint256 amount0 = IERC20(sorted0).balanceOf(address(this));
-        uint256 amount1 = IERC20(sorted1).balanceOf(address(this));
+        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(input.tickLower),
+            TickMath.getSqrtPriceAtTick(input.tickUpper),
+            input.amount0,
+            input.amount1
+        );
 
-        uint160 sqrtRatioAX96 = TickMath.getSqrtPriceAtTick(tickLower);
-        uint160 sqrtRatioBX96 = TickMath.getSqrtPriceAtTick(tickUpper);
-        if (sqrtRatioAX96 > sqrtRatioBX96) {
-            (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+        bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+
+        bytes[] memory mintParams = new bytes[](2);
+        mintParams[0] = abi.encode(
+            pool,
+            input.tickLower,
+            input.tickUpper,
+            liquidity,
+            input.amount0,
+            input.amount1,
+            input.recipient,
+            bytes("")
+        );
+        mintParams[1] = abi.encode(pool.currency0, pool.currency1);
+
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encodeWithSelector(
+            IPoolInitializer_v4.initializePool.selector,
+            pool,
+            sqrtPriceX96
+        );
+        params[1] = abi.encodeWithSelector(
+            positionManager.modifyLiquidities.selector,
+            abi.encode(actions, mintParams),
+            block.timestamp + 120
+        );
+
+        console.log("sqrtPriceX96: ", sqrtPriceX96);
+        positionManager.multicall{value: msg.value}(params);
+    }
+
+    function setupPermit2Approvals(address token0, address token1) external onlyOwner {
+        if (token0 != address(0)) {
+            IERC20(token0).approve(address(permit2), type(uint256).max);
+            permit2.approve(token0, address(positionManager), type(uint160).max, type(uint48).max);
         }
 
-        liquidity = LiquidityAmounts.getLiquidityForAmounts(
-            input.sqrtPriceX96,
-            sqrtRatioAX96,
-            sqrtRatioBX96,
-            amount0,
-            amount1
-        );
-
-        console.log("Calculated liquidity:", liquidity);
-        console.log("Amount0 to transfer:", amount0);
-        console.log("Amount1 to transfer:", amount1);
-
-        poolManager.sync(currency0);
-        poolManager.sync(currency1);
-
-        IERC20(sorted0).transfer(address(poolManager), amount0);
-        IERC20(sorted1).transfer(address(poolManager), amount1);
-
-        console.log("Calling initialize on pool manager...");
-        poolManager.initialize(currentKey, input.sqrtPriceX96);
-
-        console.log("Calling unlock on pool manager...");
-        poolManager.unlock(abi.encode("addLiquidity"));
+        if (token1 != address(0)) {
+            IERC20(token1).approve(address(permit2), type(uint256).max);
+            permit2.approve(token1, address(positionManager), type(uint160).max, type(uint48).max);
+        }
     }
 
-    function unlockCallback(bytes calldata) external override returns (bytes memory) {
-        require(msg.sender == address(poolManager), "Only PoolManager can call");
+    function initializePoolOnly(PoolInput calldata input, uint160 sqrtPriceX96) external {
+        (address sorted0, address sorted1) = input.token0 < input.token1
+            ? (input.token0, input.token1)
+            : (input.token1, input.token0);
 
-        console.log("Inside unlockCallback()");
-        console.log("Liquidity to add:", liquidity);
+        Currency currency0 = CurrencyLibrary.fromId(uint160(sorted0));
+        Currency currency1 = CurrencyLibrary.fromId(uint160(sorted1));
 
-        // ✅ Settle both currencies before using them
-        poolManager.settleFor(address(this));
+        PoolKey memory pool = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: input.fee,
+            tickSpacing: input.tickSpacing,
+            hooks: IHooks(address(0))
+        });
 
-        (BalanceDelta delta, ) = poolManager.modifyLiquidity(
-            currentKey,
-            IPoolManager.ModifyLiquidityParams({
-                tickLower: tickLower,
-                tickUpper: tickUpper,
-                liquidityDelta: int256(int128(liquidity)),
-                salt: keccak256("lmnl-v4-helper")
-            }),
-            ""
-        );
-
-        console.log("modifyLiquidity executed inside unlockCallback()");
-        return abi.encode(delta);
+        poolManager.initialize(pool, sqrtPriceX96);
     }
 
-    function transferTokensIn(address token0, address token1) external onlyOwner {
-        IERC20(token0).transferFrom(msg.sender, address(this), IERC20(token0).balanceOf(msg.sender));
-        IERC20(token1).transferFrom(msg.sender, address(this), IERC20(token1).balanceOf(msg.sender));
+    function getSqrtPriceX96FromAmounts(uint256 token0Amount, uint256 token1Amount) public pure returns (uint160) {
+        require(token0Amount > 0 && token1Amount > 0, "Amounts must be > 0");
+
+        uint256 ratioX192 = (token1Amount << 192) / token0Amount;
+        uint256 sqrtRatioX96 = sqrtUint(ratioX192);
+
+        return uint160(sqrtRatioX96);
+    }
+
+    function sqrtUint(uint256 x) internal pure returns (uint256 result) {
+        if (x == 0) return 0;
+        uint256 xx = x;
+        result = 1;
+        if (xx >= 0x100000000000000000000000000000000) {
+            xx >>= 128;
+            result <<= 64;
+        }
+        if (xx >= 0x10000000000000000) {
+            xx >>= 64;
+            result <<= 32;
+        }
+        if (xx >= 0x100000000) {
+            xx >>= 32;
+            result <<= 16;
+        }
+        if (xx >= 0x10000) {
+            xx >>= 16;
+            result <<= 8;
+        }
+        if (xx >= 0x100) {
+            xx >>= 8;
+            result <<= 4;
+        }
+        if (xx >= 0x10) {
+            xx >>= 4;
+            result <<= 2;
+        }
+        if (xx >= 0x8) {
+            result <<= 1;
+        }
+        result = (result + x / result) >> 1;
+        result = (result + x / result) >> 1;
+        result = (result + x / result) >> 1;
+        result = (result + x / result) >> 1;
+        result = (result + x / result) >> 1;
+        result = (result + x / result) >> 1;
+        result = (result + x / result) >> 1;
+        uint256 r1 = x / result;
+        return (result < r1 ? result : r1);
     }
 }

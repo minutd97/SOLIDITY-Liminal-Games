@@ -9,7 +9,7 @@
     "@chainlink/contracts": "^1.3.0",
     "@nomicfoundation/hardhat-network-helpers": "^1.0.12",
     "@openzeppelin/contracts": "^5.1.0",
-    "@uniswap/v3-core": "^1.0.1",
+    "@uniswap/universal-router": "^2.0.0",
     "@uniswap/v3-periphery": "^1.4.4",
     "@uniswap/v4-core": "^1.0.1",
     "@uniswap/v4-periphery": "^1.0.1",

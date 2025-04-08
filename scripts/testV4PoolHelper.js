@@ -17,6 +17,7 @@ const FORK_MAINNET = process.env.FORK_MAINNET;
 const POOL_MANAGER = FORK_MAINNET ? "0x360e68faccca8ca495c1b759fd9eee466db9fb32" : "0xFB3e0C6F74eB1a21CC1Da29aeC80D2Dfe6C9a317";
 const POSITION_MANAGER = FORK_MAINNET ? "0xd88f38f930b7952f2db2432cb002e7abbf3dd869" : "0xAc631556d3d4019C95769033B5E719dD77124BAc";
 const PERMIT2_ADDRESS = FORK_MAINNET ? "0x000000000022D473030F116dDEE9F6B43aC78BA3" : "0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768";
+const UNIVERSAL_ROUTER = FORK_MAINNET ? "0xa51afafe0263b40edaef0df8781ea9aa03e381a3" : "0xefd1d4bd4cf1e86da286bb4cb1b8bced9c10ba47";
 
 async function main() {
     console.log("🚀 Starting script... FORK_MAINNET:", FORK_MAINNET);
@@ -29,11 +30,17 @@ async function main() {
 
     const [owner] = await ethers.getSigners();
 
-    // Deploy helper
-    const Helper = await ethers.getContractFactory("V4PoolHelper");
-    const helper = await Helper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS);
-    await helper.waitForDeployment();
-    console.log("✅ Deployed V4PoolHelper at", helper.target);
+    // Deploy PoolHelper
+    const PoolHelper = await ethers.getContractFactory("V4PoolHelper");
+    const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS);
+    await poolHelper.waitForDeployment();
+    console.log("✅ Deployed V4PoolHelper at", poolHelper.target);
+
+    // Deploy SwapHelper
+    const SwapHelper = await ethers.getContractFactory("V4SwapHelper");
+    const swapHelper = await SwapHelper.deploy(UNIVERSAL_ROUTER, POOL_MANAGER, PERMIT2_ADDRESS);
+    await swapHelper.waitForDeployment();
+    console.log("✅ Deployed V4SwapHelper at", swapHelper.target);
 
     // Deploy LiminalToken
     const LiminalToken = await ethers.getContractFactory("LiminalToken");
@@ -57,7 +64,7 @@ async function main() {
     //await weth.deposit({ value: ethers.parseEther("100") });
     //console.log("✅ Wrapped 100 ETH");
 
-    await helper.setupPermit2Approvals(ethers.ZeroAddress, limToken.target);
+    await poolHelper.setupPermit2Approvals(ethers.ZeroAddress, limToken.target);
     console.log("✅ Approved tokens to Permit2");
 
     const poolInput = {
@@ -72,10 +79,42 @@ async function main() {
         recipient: owner.address,
       };
 
-    const tx = await helper.createPoolAndAddLiquidity(poolInput, { value: ethers.parseEther("1") });
+    const tx = await poolHelper.createPoolAndAddLiquidity(poolInput, { value: ethers.parseEther("1") });
     const receipt = await tx.wait();
     console.log("✅ Pool initialized and liquidity added");
+
+    await swap(owner, poolInput.token0, poolInput.token1);
+
     await listenToPoolEvents(receipt.blockNumber);
+}
+
+async function swap(owner, token0, token1) {
+  const poolManager = new ethers.Contract(POOL_MANAGER, POOL_MANAGER_ABI, owner);
+
+  console.log("Settling ETH...");
+  const settleTx = await poolManager.settleFor(owner.address, {
+    value: ethers.parseEther("0.1")
+  });
+  await settleTx.wait();
+  console.log("✅ ETH settled via settleFor");
+
+  const poolKey = {
+    currency0: token0,
+    currency1: token1,
+    fee: 3000,
+    tickSpacing: 60,
+    hooks: ethers.ZeroAddress
+  };
+
+  const swapParams = {
+    zeroForOne: true,
+    amountSpecified: -ethers.parseEther("0.1"),
+    sqrtPriceLimitX96: 0
+  };
+
+  const swapTx = await poolManager.swap(poolKey, swapParams, "0x");
+  await swapTx.wait();
+  console.log("✅ Swap executed: ETH → LIM");
 }
 
 async function listenToPoolEvents(blockNumber) {

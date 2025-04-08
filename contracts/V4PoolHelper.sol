@@ -2,8 +2,6 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "hardhat/console.sol";
-
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -23,11 +21,7 @@ contract V4PoolHelper is Ownable {
     IPositionManager public immutable positionManager;
     IAllowanceTransfer public immutable permit2;
 
-    constructor(
-        address _poolManager,
-        address _positionManager,
-        address _permit2
-    ) Ownable(msg.sender) {
+    constructor(address _poolManager, address _positionManager, address _permit2) Ownable(msg.sender) {
         poolManager = IPoolManager(_poolManager);
         positionManager = IPositionManager(_positionManager);
         permit2 = IAllowanceTransfer(_permit2);
@@ -45,15 +39,11 @@ contract V4PoolHelper is Ownable {
         address recipient;
     }
 
-    function createPoolAndAddLiquidity(PoolInput calldata input) external payable {
+    function createPoolAndAddLiquidity(PoolInput calldata input) external payable onlyOwner {
         bool isCorrectOrder = input.token0 < input.token1;
         (address sorted0, address sorted1) = isCorrectOrder
             ? (input.token0, input.token1)
             : (input.token1, input.token0);
-
-        console.log("Sorted Order:");
-        console.log("Currency0 (should be lesser):", sorted0);
-        console.log("Currency1:", sorted1);
 
         Currency currency0 = CurrencyLibrary.fromId(uint160(sorted0));
         Currency currency1 = CurrencyLibrary.fromId(uint160(sorted1));
@@ -103,7 +93,6 @@ contract V4PoolHelper is Ownable {
             block.timestamp + 120
         );
 
-        console.log("sqrtPriceX96: ", sqrtPriceX96);
         positionManager.multicall{value: msg.value}(params);
     }
 
@@ -117,25 +106,6 @@ contract V4PoolHelper is Ownable {
             IERC20(token1).approve(address(permit2), type(uint256).max);
             permit2.approve(token1, address(positionManager), type(uint160).max, type(uint48).max);
         }
-    }
-
-    function initializePoolOnly(PoolInput calldata input, uint160 sqrtPriceX96) external {
-        (address sorted0, address sorted1) = input.token0 < input.token1
-            ? (input.token0, input.token1)
-            : (input.token1, input.token0);
-
-        Currency currency0 = CurrencyLibrary.fromId(uint160(sorted0));
-        Currency currency1 = CurrencyLibrary.fromId(uint160(sorted1));
-
-        PoolKey memory pool = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: input.fee,
-            tickSpacing: input.tickSpacing,
-            hooks: IHooks(address(0))
-        });
-
-        poolManager.initialize(pool, sqrtPriceX96);
     }
 
     function getSqrtPriceX96FromAmounts(uint256 token0Amount, uint256 token1Amount) public pure returns (uint160) {

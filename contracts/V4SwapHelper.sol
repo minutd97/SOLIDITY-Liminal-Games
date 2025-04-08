@@ -28,12 +28,18 @@ contract V4SwapHelper {
         permit2 = IPermit2(_permit2);
     }
 
-    function approveTokenWithPermit2(address token, uint160 amount, uint48 expiration) external {
+    function approveTokenWithPermit2(address token) external {
         IERC20(token).approve(address(permit2), type(uint256).max);
-        permit2.approve(token, address(router), amount, expiration);
+        permit2.approve(token, address(router), type(uint160).max, type(uint48).max);
     }
 
     function swapExactInputSingle(PoolKey calldata key, bool zeroForOne, uint128 amountIn, uint128 minAmountOut) external payable {
+        if (!zeroForOne) {
+            address tokenIn = address(uint160(Currency.unwrap(key.currency1))); // ← LIM in this case
+            IERC20(tokenIn).transferFrom(msg.sender, address(router), amountIn);
+            console.log("Transferred tokenIn to router contract, amount: ", amountIn);
+        }
+                
         bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
         bytes[] memory inputs = new bytes[](1);
 
@@ -53,6 +59,7 @@ contract V4SwapHelper {
         //     ""                  // hookData
         // );
 
+        // Construct the swap parameters
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
                 poolKey: key,
@@ -63,23 +70,25 @@ contract V4SwapHelper {
             })
         );
 
-        params[1] = abi.encode(key.currency0, amountIn);
-        params[2] = abi.encode(key.currency1, minAmountOut);
+        // Payment and settlement currencies
+        params[1] = abi.encode(zeroForOne ? key.currency0 : key.currency1, amountIn);
+        params[2] = abi.encode(zeroForOne ? key.currency1 : key.currency0, minAmountOut);
 
         inputs[0] = abi.encode(actions, params);
 
-        uint256 balanceBefore = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
-
         uint256 deadline = block.timestamp + 20;
-        router.execute{ value: amountIn }(commands, inputs, deadline);
 
-        uint256 balanceAfter = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
-        uint256 amountOut = balanceAfter - balanceBefore;
-
-        console.log("Swap output (raw):", amountOut);
-        console.log("Minimum expected:", minAmountOut);
-        require(amountOut >= minAmountOut, "Insufficient output amount");
+        if (msg.value > 0) {
+            // ETH as input
+            uint256 balanceBefore = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
+            router.execute{ value: amountIn }(commands, inputs, deadline);
+            uint256 balanceAfter = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
+            uint256 amountOut = balanceAfter - balanceBefore;
+            IERC20(Currency.unwrap(key.currency1)).transfer(msg.sender, amountOut);
+            console.log("Transferred tokenOut to user, amount: ", amountOut);
+        } else {
+            // ERC20 as input
+            router.execute(commands, inputs, deadline);
+        }
     }
-
-    receive() external payable {}
 }

@@ -33,7 +33,7 @@ contract V4SwapHelper {
         permit2.approve(token, address(router), amount, expiration);
     }
 
-    function swapExactInputSingle(PoolKey calldata key, uint128 amountIn, uint128 minAmountOut) external returns (uint256 amountOut) {
+    function swapExactInputSingle(PoolKey calldata key, bool zeroForOne, uint128 amountIn, uint128 minAmountOut) external payable {
         bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
         bytes[] memory inputs = new bytes[](1);
 
@@ -56,7 +56,7 @@ contract V4SwapHelper {
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
                 poolKey: key,
-                zeroForOne: true,            // true if we're swapping token0 for token1
+                zeroForOne: zeroForOne,            // true if we're swapping token0 for token1
                 amountIn: amountIn,          // amount of tokens we're swapping
                 amountOutMinimum: minAmountOut, // minimum amount we expect to receive
                 hookData: bytes("")             // no hook data needed
@@ -68,18 +68,14 @@ contract V4SwapHelper {
 
         inputs[0] = abi.encode(actions, params);
 
-        uint256 deadline = block.timestamp + 20;
-        try router.execute{ value: amountIn }(commands, inputs, deadline) {
-            // success
-        } catch Error(string memory reason) {
-            console.log("UniversalRouter revert:", reason);
-            revert(reason);
-        } catch (bytes memory lowLevelData) {
-            console.logBytes(lowLevelData);
-            revert("UniversalRouter low-level revert");
-        }
+        uint256 balanceBefore = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
 
-        amountOut = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
+        uint256 deadline = block.timestamp + 20;
+        router.execute{ value: amountIn }(commands, inputs, deadline);
+
+        uint256 balanceAfter = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
+        uint256 amountOut = balanceAfter - balanceBefore;
+
         console.log("Swap output (raw):", amountOut);
         console.log("Minimum expected:", minAmountOut);
         require(amountOut >= minAmountOut, "Insufficient output amount");

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -111,7 +112,7 @@ contract V4PoolHelper is Ownable {
     function getSqrtPriceX96FromAmounts(uint256 token0Amount, uint256 token1Amount) public pure returns (uint160) {
         require(token0Amount > 0 && token1Amount > 0, "Amounts must be > 0");
 
-        uint256 ratioX192 = (token1Amount << 192) / token0Amount;
+        uint256 ratioX192 = FullMath.mulDiv(token1Amount, 2**192, token0Amount);
         uint256 sqrtRatioX96 = sqrtUint(ratioX192);
 
         return uint160(sqrtRatioX96);

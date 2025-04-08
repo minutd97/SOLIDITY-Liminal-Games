@@ -15,6 +15,9 @@ const FORK_MAINNET = process.env.FORK_MAINNET;
 // ];
 
 const POOL_MANAGER = FORK_MAINNET ? "0x360e68faccca8ca495c1b759fd9eee466db9fb32" : "0xFB3e0C6F74eB1a21CC1Da29aeC80D2Dfe6C9a317";
+const POOL_MANAGER_ABI = [
+  "function settle() payable returns (uint256)"
+];
 const POSITION_MANAGER = FORK_MAINNET ? "0xd88f38f930b7952f2db2432cb002e7abbf3dd869" : "0xAc631556d3d4019C95769033B5E719dD77124BAc";
 const PERMIT2_ADDRESS = FORK_MAINNET ? "0x000000000022D473030F116dDEE9F6B43aC78BA3" : "0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768";
 const UNIVERSAL_ROUTER = FORK_MAINNET ? "0xa51afafe0263b40edaef0df8781ea9aa03e381a3" : "0xefd1d4bd4cf1e86da286bb4cb1b8bced9c10ba47";
@@ -67,23 +70,47 @@ async function main() {
     await poolHelper.setupPermit2Approvals(ethers.ZeroAddress, limToken.target);
     console.log("✅ Approved tokens to Permit2");
 
+    await limToken.transfer(poolHelper.target, ethers.parseUnits("1000", 18));
+    console.log("✅ Transferred 1000 LIM to PoolHelper");
+
+    const allowance = await limToken.allowance(poolHelper.target, PERMIT2_ADDRESS);
+    console.log("LIM -> Permit2 allowance:", allowance.toString());
+
+
     const poolInput = {
         token0: ethers.ZeroAddress,
         token1: limToken.target,
         amount0: ethers.parseUnits("1", 18), // e.g. 1 ETH
-        amount1: ethers.parseUnits("1000", 6), // e.g. 1000 USDC
+        amount1: ethers.parseUnits("1000", 18), // e.g. 1000 LIM
         fee: 3000,
         tickSpacing: 60,
-        tickLower: -60000,
-        tickUpper: 60000,
+        tickLower: -18000,
+        tickUpper: 18000,
         recipient: owner.address,
       };
-
     const tx = await poolHelper.createPoolAndAddLiquidity(poolInput, { value: ethers.parseEther("1") });
     const receipt = await tx.wait();
     console.log("✅ Pool initialized and liquidity added");
 
-    await swap(owner, poolInput.token0, poolInput.token1);
+    const poolKey = {
+      currency0: poolInput.token0,
+      currency1: poolInput.token1,
+      fee: 3000,
+      tickSpacing: 60,
+      hooks: ethers.ZeroAddress
+    };
+    const amountIn = ethers.parseUnits("0.1", 18);       // 0.1 ETH
+    const minAmountOut = ethers.parseUnits("0.34", 18);     // Minimum expected output in LIM
+    
+    await owner.sendTransaction({
+      to: swapHelper.target,
+      value: amountIn
+    });
+    const swapHelperBalance = await ethers.provider.getBalance(swapHelper.target);
+    console.log("💰 ETH Balance in V4SwapHelper:", ethers.formatEther(swapHelperBalance));
+
+    const amountOut = await swapHelper.swapExactInputSingle(poolKey, amountIn, minAmountOut);
+    console.log("✅ Successfully swapped:", amountOut.toString(), "LIM");
 
     await listenToPoolEvents(receipt.blockNumber);
 }

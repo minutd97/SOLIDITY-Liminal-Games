@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import { UniversalRouter } from "@uniswap/universal-router/contracts/UniversalRouter.sol";
+import { IUniversalRouter } from "@uniswap/universal-router/contracts/interfaces/IUniversalRouter.sol";
 import { Commands } from "@uniswap/universal-router/contracts/libraries/Commands.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { IV4Router } from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
@@ -12,15 +12,18 @@ import { IHooks } from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import { CurrencyLibrary, Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 
+/// @dev Only include this during Hardhat testing
+import "hardhat/console.sol";
+
 contract V4SwapHelper {
     using CurrencyLibrary for Currency;
 
-    UniversalRouter public immutable router;
+    IUniversalRouter public immutable router;
     IPoolManager public immutable poolManager;
     IPermit2 public immutable permit2;
 
-    constructor(address payable _router, address _poolManager, address _permit2) {
-        router = UniversalRouter(payable(_router));
+    constructor(address _router, address _poolManager, address _permit2) {
+        router = IUniversalRouter(_router);
         poolManager = IPoolManager(_poolManager);
         permit2 = IPermit2(_permit2);
     }
@@ -30,11 +33,7 @@ contract V4SwapHelper {
         permit2.approve(token, address(router), amount, expiration);
     }
 
-    function swapExactInputSingle(
-        PoolKey calldata key,
-        uint128 amountIn,
-        uint128 minAmountOut
-    ) external returns (uint256 amountOut) {
+    function swapExactInputSingle(PoolKey calldata key, uint128 amountIn, uint128 minAmountOut) external returns (uint256 amountOut) {
         bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
         bytes[] memory inputs = new bytes[](1);
 
@@ -45,24 +44,46 @@ contract V4SwapHelper {
         );
 
         bytes[] memory params = new bytes[](3);
+        // params[0] = abi.encode(
+        //     key,
+        //     true,               // zeroForOne
+        //     amountIn,
+        //     minAmountOut,
+        //     address(this),      // recipient
+        //     ""                  // hookData
+        // );
+
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({
                 poolKey: key,
-                zeroForOne: true,
-                amountIn: amountIn,
-                amountOutMinimum: minAmountOut,
-                hookData: ""
+                zeroForOne: true,            // true if we're swapping token0 for token1
+                amountIn: amountIn,          // amount of tokens we're swapping
+                amountOutMinimum: minAmountOut, // minimum amount we expect to receive
+                hookData: bytes("")             // no hook data needed
             })
         );
+
         params[1] = abi.encode(key.currency0, amountIn);
         params[2] = abi.encode(key.currency1, minAmountOut);
 
         inputs[0] = abi.encode(actions, params);
 
         uint256 deadline = block.timestamp + 20;
-        router.execute(commands, inputs, deadline);
+        try router.execute{ value: amountIn }(commands, inputs, deadline) {
+            // success
+        } catch Error(string memory reason) {
+            console.log("UniversalRouter revert:", reason);
+            revert(reason);
+        } catch (bytes memory lowLevelData) {
+            console.logBytes(lowLevelData);
+            revert("UniversalRouter low-level revert");
+        }
 
         amountOut = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
+        console.log("Swap output (raw):", amountOut);
+        console.log("Minimum expected:", minAmountOut);
         require(amountOut >= minAmountOut, "Insufficient output amount");
     }
+
+    receive() external payable {}
 }

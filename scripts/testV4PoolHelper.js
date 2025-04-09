@@ -75,11 +75,7 @@ async function main() {
     await limToken.transfer(poolHelper.target, limAmount);
     console.log(`✅ Transferred ${limAmount} LIM to PoolHelper`);
 
-    await limToken.transfer(user1.address, ethers.parseUnits("1000000", 18));
-
-    //const allowance = await limToken.allowance(poolHelper.target, PERMIT2_ADDRESS);
-    //console.log("LIM -> Permit2 allowance:", allowance.toString());
-
+    // INITIALIZE POOL AND ADD LIQUIDITY
     const poolInput = {
         token0: ethers.ZeroAddress,
         token1: limToken.target,
@@ -95,6 +91,7 @@ async function main() {
     const receipt = await tx.wait();
     console.log("✅ Pool initialized and liquidity added");
 
+    // SWAP EXAMPLE
     const poolKey = {
       currency0: poolInput.token0,
       currency1: poolInput.token1,
@@ -102,19 +99,11 @@ async function main() {
       tickSpacing: poolInput.tickSpacing,
       hooks: ethers.ZeroAddress
     };
-    // const amountIn = ethers.parseUnits("0.1", 18);       // 0.1 ETH
-    // const minAmountOut = ethers.parseUnits("0.2", 18);     // Minimum expected output in LIM
-    // await swapHelper.swapExactInputSingle(poolKey, true, amountIn, minAmountOut, { value: amountIn });
-    // console.log("✅ Successfully swapped!");
-
-    //await swap(poolKey, true, ethers.parseUnits("0.1", 18), user1); //swap 0.1 ETH
-
-    console.log("✅ SWAP HELPER: Approving tokens to Permit2...");
+    // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
     await swapHelper.approveTokenWithPermit2(poolKey.currency1);
-    const allowance = await limToken.allowance(swapHelper.target, PERMIT2_ADDRESS);
-    console.log("LIM -> Permit2 SWAP HELPER allowance:", allowance.toString());
-    console.log("✅ SWAP HELPER: Approved tokens to Permit2");
-    await swap(poolKey, false, ethers.parseUnits("20000", 18), user1); //swap 0.1 LIM
+
+    await swap(poolKey, true, ethers.parseUnits("0.1", 18), user1); //swap 0.1 ETH
+    await swap(poolKey, false, ethers.parseUnits("20000", 18), user1); //swap 20000 LIM
     await listenToPoolEvents(receipt.blockNumber);
 }
 

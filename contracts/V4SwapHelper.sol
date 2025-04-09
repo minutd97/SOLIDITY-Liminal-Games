@@ -36,7 +36,7 @@ contract V4SwapHelper {
     function swapExactInputSingle(PoolKey calldata key, bool zeroForOne, uint128 amountIn, uint128 minAmountOut) external payable {
         if (!zeroForOne) {
             address tokenIn = address(uint160(Currency.unwrap(key.currency1))); // ← LIM in this case
-            IERC20(tokenIn).transferFrom(msg.sender, address(router), amountIn);
+            IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
             console.log("Transferred tokenIn to router contract, amount: ", amountIn);
         }
                 
@@ -84,11 +84,20 @@ contract V4SwapHelper {
             router.execute{ value: amountIn }(commands, inputs, deadline);
             uint256 balanceAfter = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
             uint256 amountOut = balanceAfter - balanceBefore;
-            IERC20(Currency.unwrap(key.currency1)).transfer(msg.sender, amountOut);
-            console.log("Transferred tokenOut to user, amount: ", amountOut);
+            console.log("Returned LIM amount: ", amountOut);
+            bool success = IERC20(Currency.unwrap(key.currency1)).transfer(msg.sender, amountOut);
+            require(success, "Failed to send LIM back to user");
         } else {
             // ERC20 as input
+            uint256 balanceBefore = address(this).balance;
             router.execute(commands, inputs, deadline);
+            uint256 balanceAfter = address(this).balance;
+            uint256 amountOut = balanceAfter - balanceBefore;
+            console.log("Returned ETH amount: ", amountOut);
+            (bool success, ) = msg.sender.call{value: amountOut}("");
+            require(success, "Failed to send ETH back to user");
         }
     }
+
+    receive() external payable {}
 }

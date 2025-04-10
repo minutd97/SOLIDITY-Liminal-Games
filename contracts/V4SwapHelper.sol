@@ -50,15 +50,6 @@ contract V4SwapHelper {
         );
 
         bytes[] memory params = new bytes[](3);
-        // params[0] = abi.encode(
-        //     key,
-        //     true,               // zeroForOne
-        //     amountIn,
-        //     minAmountOut,
-        //     address(this),      // recipient
-        //     ""                  // hookData
-        // );
-
         // Construct the swap parameters
         params[0] = abi.encode(
             IV4Router.ExactInputSingleParams({

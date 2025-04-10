@@ -84,8 +84,7 @@ async function main() {
         fee: 300,
         tickSpacing: 60,
         tickLower: 148560,
-        tickUpper: 149760,
-        recipient: owner.address,
+        tickUpper: 149760
       };
     const tx = await poolHelper.createPoolAndAddLiquidity(poolInput, { value: ethAmount });
     const receipt = await tx.wait();

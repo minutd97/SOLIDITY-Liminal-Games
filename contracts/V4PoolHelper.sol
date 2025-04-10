@@ -37,7 +37,6 @@ contract V4PoolHelper is Ownable {
         int24 tickSpacing;
         int24 tickLower;
         int24 tickUpper;
-        address recipient;
     }
 
     function createPoolAndAddLiquidity(PoolInput calldata input) external payable onlyOwner {
@@ -77,7 +76,7 @@ contract V4PoolHelper is Ownable {
             liquidity,
             input.amount0,
             input.amount1,
-            input.recipient,
+            msg.sender,
             bytes("")
         );
         mintParams[1] = abi.encode(pool.currency0, pool.currency1);

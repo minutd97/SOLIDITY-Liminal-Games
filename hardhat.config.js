@@ -11,7 +11,7 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
-      viaIR: true,
+      viaIR: false,
       evmVersion: "cancun" // ✅ THIS is the fix
     },
   },
@@ -20,10 +20,10 @@ module.exports = {
 
   networks: {
     hardhat: {
-      forking: {
-        url: "https://arb-mainnet.g.alchemy.com/v2/XNZLa2FrNs3uRaESVLHIb1XrNsUmpMmH",
-        //blockNumber: 321922670,
-      },
+      // forking: {
+      //   url: "https://arb-mainnet.g.alchemy.com/v2/XNZLa2FrNs3uRaESVLHIb1XrNsUmpMmH",
+      //   //blockNumber: 321922670,
+      // },
       chainId: 31337,
       mining: {
         auto: true,

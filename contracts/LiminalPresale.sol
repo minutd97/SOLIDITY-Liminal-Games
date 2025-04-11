@@ -26,8 +26,8 @@ contract LiminalPresale is Ownable {
     bool public presaleEnded = false;
     uint256 public processedBuyersCount = 0;
 
+    uint256 public totalPoolTokens;
     uint256 public totalPresaleTokens;
-    uint256 public totalRewardTokens;
     uint256 public totalContributions;
 
     mapping(address => uint256) public presaleContributions;
@@ -94,10 +94,10 @@ contract LiminalPresale is Ownable {
             address buyer = buyers[processedBuyersCount];     
             uint256 contribution = presaleContributions[buyer];
             uint256 tokensToTransfer = (contribution * LIM_TOKEN_RATE * 1e18) / 1 ether;
-            require(tokensToTransfer <= totalRewardTokens, "Insufficient reward tokens");
+            require(tokensToTransfer <= totalPresaleTokens, "Insufficient reward tokens");
 
             limToken.transfer(buyer, tokensToTransfer);
-            totalRewardTokens -= tokensToTransfer;
+            totalPresaleTokens -= tokensToTransfer;
             processedBuyersCount++;
         }
     }
@@ -119,17 +119,17 @@ contract LiminalPresale is Ownable {
         }
     }
 
+    function depositPoolTokens(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than 0");
+        limToken.transferFrom(msg.sender, address(this), amount);
+        totalPoolTokens += amount;
+        emit PresaleTokensDeposited(amount);
+    }
+
     function depositPresaleTokens(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
         limToken.transferFrom(msg.sender, address(this), amount);
         totalPresaleTokens += amount;
-        emit PresaleTokensDeposited(amount);
-    }
-
-    function depositRewardTokens(uint256 amount) external onlyOwner {
-        require(amount > 0, "Amount must be greater than 0");
-        limToken.transferFrom(msg.sender, address(this), amount);
-        totalRewardTokens += amount;
         emit RewardTokensDeposited(amount);
     }
 

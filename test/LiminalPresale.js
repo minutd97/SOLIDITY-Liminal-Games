@@ -14,9 +14,13 @@ describe("LiminalPresale", function () {
     const presale = await LiminalPresale.deploy(lim.target);
     await presale.waitForDeployment();
 
-    const presaleRewardInTokens = ethers.parseUnits("30000000", 18); // 30 mil LIM
-    await lim.connect(owner).approve(presale.target, presaleRewardInTokens)
-    await presale.connect(owner).depositRewardTokens(presaleRewardInTokens);
+    const tokensForPool = ethers.parseUnits("30000000", 18); // 30 mil LIM
+    await lim.connect(owner).approve(presale.target, tokensForPool)
+    await presale.connect(owner).depositPoolTokens(tokensForPool);
+
+    const tokensForPresale = ethers.parseUnits("30000000", 18); // 30 mil LIM
+    await lim.connect(owner).approve(presale.target, tokensForPresale)
+    await presale.connect(owner).depositPresaleTokens(tokensForPresale);
 
     return { owner, user1, user2, lim, presale };
   }
@@ -73,7 +77,7 @@ describe("LiminalPresale", function () {
         await presale.distributeTokens(100);
     }
 
-    const balance = await lim.balanceOf(await presale.getAddress());
+    const balance = await presale.totalPresaleTokens();
     expect(balance).to.equal(0);
   });
 
@@ -113,7 +117,7 @@ describe("LiminalPresale", function () {
         await presale.refundUsers(100);
     }
 
-    let ethBalance = await ethers.provider.getBalance(presale.target);
+    const ethBalance = await presale.totalContributions();
     expect(ethBalance).to.equal(0);
   });
 

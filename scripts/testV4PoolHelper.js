@@ -66,6 +66,7 @@ async function main() {
     //await weth.deposit({ value: ethers.parseEther("100") });
     //console.log("✅ Wrapped 100 ETH");
 
+    await poolHelper.grantCreatorRole(owner.address);
     await poolHelper.setupPermit2Approvals(ethers.ZeroAddress, limToken.target);
     console.log("✅ POOL HELPER: Approved tokens to Permit2");
 

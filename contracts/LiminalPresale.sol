@@ -7,8 +7,13 @@ import "./LiminalToken.sol";
 /// @dev Only include this during Hardhat testing
 import "hardhat/console.sol";
 
+interface IV4PoolHelper {
+    function createPoolAndAddLiquidity() external;
+}
+
 contract LiminalPresale is Ownable {
     LiminalToken public immutable limToken;
+    address public immutable v4PoolHelper;
     
     uint256 public constant presaleCap = 10 ether;
     uint256 public startTime;
@@ -47,8 +52,9 @@ contract LiminalPresale is Ownable {
         _;
     }
 
-    constructor(address _limToken) Ownable(msg.sender) {
+    constructor(address _limToken, address _v4PoolHelper) Ownable(msg.sender) {
         limToken = LiminalToken(_limToken);
+        v4PoolHelper = _v4PoolHelper;
     }
 
     function startPresale(uint256 _durationInSeconds) external onlyOwner {

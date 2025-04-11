@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -15,14 +16,17 @@ import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmo
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract V4PoolHelper is Ownable {
+contract V4PoolHelper is Ownable, AccessControl {
     using CurrencyLibrary for Currency;
+
+    bytes32 public constant POOL_CREATOR = keccak256("POOL_CREATOR");
 
     IPoolManager public immutable poolManager;
     IPositionManager public immutable positionManager;
     IAllowanceTransfer public immutable permit2;
 
     constructor(address _poolManager, address _positionManager, address _permit2) Ownable(msg.sender) {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         poolManager = IPoolManager(_poolManager);
         positionManager = IPositionManager(_positionManager);
         permit2 = IAllowanceTransfer(_permit2);
@@ -39,7 +43,7 @@ contract V4PoolHelper is Ownable {
         int24 tickUpper;
     }
 
-    function createPoolAndAddLiquidity(PoolInput calldata input) external payable onlyOwner {
+    function createPoolAndAddLiquidity(PoolInput calldata input) external payable onlyRole(POOL_CREATOR) {
         bool isCorrectOrder = input.token0 < input.token1;
         (address sorted0, address sorted1) = isCorrectOrder
             ? (input.token0, input.token1)
@@ -67,7 +71,28 @@ contract V4PoolHelper is Ownable {
         );
 
         bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
+        bytes[] memory mintParams = buildMintParams(pool, input, liquidity);
+        bytes[] memory params = buildPositionParams(pool, actions, mintParams, sqrtPriceX96);
 
+        positionManager.multicall{value: msg.value}(params);
+    }
+
+    function buildPositionParams(PoolKey memory pool, bytes memory actions, bytes[] memory mintParams, uint160 sqrtPriceX96) internal view returns (bytes[] memory) {
+        bytes[] memory params = new bytes[](2);
+        params[0] = abi.encodeWithSelector(
+            IPoolInitializer_v4.initializePool.selector,
+            pool,
+            sqrtPriceX96
+        );
+        params[1] = abi.encodeWithSelector(
+            positionManager.modifyLiquidities.selector,
+            abi.encode(actions, mintParams),
+            block.timestamp + 120
+        );
+        return params;
+    }
+
+    function buildMintParams(PoolKey memory pool, PoolInput memory input, uint128 liquidity) internal view returns (bytes[] memory) {
         bytes[] memory mintParams = new bytes[](2);
         mintParams[0] = abi.encode(
             pool,
@@ -80,23 +105,10 @@ contract V4PoolHelper is Ownable {
             bytes("")
         );
         mintParams[1] = abi.encode(pool.currency0, pool.currency1);
-
-        bytes[] memory params = new bytes[](2);
-        params[0] = abi.encodeWithSelector(
-            IPoolInitializer_v4.initializePool.selector,
-            pool,
-            sqrtPriceX96
-        );
-        params[1] = abi.encodeWithSelector(
-            positionManager.modifyLiquidities.selector,
-            abi.encode(actions, mintParams),
-            block.timestamp + 120
-        );
-
-        positionManager.multicall{value: msg.value}(params);
+        return mintParams;
     }
 
-    function setupPermit2Approvals(address token0, address token1) external onlyOwner {
+    function setupPermit2Approvals(address token0, address token1) external onlyRole(POOL_CREATOR) {
         if (token0 != address(0)) {
             IERC20(token0).approve(address(permit2), type(uint256).max);
             permit2.approve(token0, address(positionManager), type(uint160).max, type(uint48).max);
@@ -157,5 +169,13 @@ contract V4PoolHelper is Ownable {
         result = (result + x / result) >> 1;
         uint256 r1 = x / result;
         return (result < r1 ? result : r1);
+    }
+
+    function grantCreatorRole(address account) public onlyOwner {
+        grantRole(POOL_CREATOR, account);
+    }
+
+    function revokeCreatorRole(address account) public onlyOwner {
+        revokeRole(POOL_CREATOR, account);
     }
 }

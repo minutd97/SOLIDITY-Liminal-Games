@@ -21,7 +21,7 @@ module.exports = {
   networks: {
     hardhat: {
       // forking: {
-      //   url: "https://arb-mainnet.g.alchemy.com/v2/XNZLa2FrNs3uRaESVLHIb1XrNsUmpMmH",
+      //   url: FORK_MAINNET ? "https://arb-mainnet.g.alchemy.com/v2/XNZLa2FrNs3uRaESVLHIb1XrNsUmpMmH" : "https://sepolia-rollup.arbitrum.io/rpc",
       //   //blockNumber: 321922670,
       // },
       chainId: 31337,

@@ -9,39 +9,45 @@ const POSITION_MANAGER = FORK_MAINNET ? "0xd88f38f930b7952f2db2432cb002e7abbf3dd
 const PERMIT2_ADDRESS = FORK_MAINNET ? "0x000000000022D473030F116dDEE9F6B43aC78BA3" : "0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768";
 const UNIVERSAL_ROUTER = FORK_MAINNET ? "0xa51afafe0263b40edaef0df8781ea9aa03e381a3" : "0xefd1d4bd4cf1e86da286bb4cb1b8bced9c10ba47";
 
+let limToken, swapHelper;
+
 describe("LiminalPresale", function () {
   async function deployFixture() {
     const [owner, user1, user2] = await ethers.getSigners();
 
     // Deploy LIM Token
     const LiminalToken = await ethers.getContractFactory("LiminalToken");
-    const lim = await LiminalToken.deploy();
-    await lim.waitForDeployment();
+    limToken = await LiminalToken.deploy();
+    await limToken.waitForDeployment();
 
     // Deploy PoolHelper
     const PoolHelper = await ethers.getContractFactory("V4PoolHelper");
     const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS);
     await poolHelper.waitForDeployment();
 
+    // DEV ONLY!!!!!!!!!!!!!!!!!!!!!!
     // Deploy SwapHelper
     const SwapHelper = await ethers.getContractFactory("V4SwapHelper");
-    const swapHelper = await SwapHelper.deploy(UNIVERSAL_ROUTER, POOL_MANAGER, PERMIT2_ADDRESS);
+    swapHelper = await SwapHelper.deploy(UNIVERSAL_ROUTER, POOL_MANAGER, PERMIT2_ADDRESS);
     await swapHelper.waitForDeployment();
 
     // Deploy LiminalPresale
     const LiminalPresale = await ethers.getContractFactory("LiminalPresale");
-    const presale = await LiminalPresale.deploy(lim.target, poolHelper.target);
+    const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target);
     await presale.waitForDeployment();
 
+    // Let the presale contract be the pool creator
+    await poolHelper.grantCreatorRole(presale.target);
+
     const tokensForPool = ethers.parseUnits("30000000", 18); // 30 mil LIM
-    await lim.connect(owner).approve(presale.target, tokensForPool)
+    await limToken.connect(owner).approve(presale.target, tokensForPool)
     await presale.connect(owner).depositPoolTokens(tokensForPool);
 
     const tokensForPresale = ethers.parseUnits("30000000", 18); // 30 mil LIM
-    await lim.connect(owner).approve(presale.target, tokensForPresale)
+    await limToken.connect(owner).approve(presale.target, tokensForPresale)
     await presale.connect(owner).depositPresaleTokens(tokensForPresale);
 
-    return { owner, user1, user2, lim, presale, swapHelper};
+    return { owner, user1, user2, presale};
   }
 
 //   it("should accept contributions within limits", async function () {
@@ -58,7 +64,6 @@ describe("LiminalPresale", function () {
 //     const { owner, presale, lim, user1 } = await loadFixture(deployFixture);
 //     await presale.startPresale(3600); // 1-hour presale
 
-//     const initialPresaleTokens = await presale.totalPresaleTokens();
 //     await testRemainingTime(presale, 10);
 
 //     const ethValue = ethers.parseEther("0.5");
@@ -97,12 +102,8 @@ describe("LiminalPresale", function () {
 //         await presale.distributeTokens(100);
 //     }
 
-//     const tokenRate = await presale.LIM_TOKEN_RATE();
-//     const totalContributions = await presale.totalContributions();
-//     const diference = initialPresaleTokens - (tokenRate * totalContributions);
-
 //     const totalPresaleTokens = await presale.totalPresaleTokens();
-//     expect(diference).to.equal(totalPresaleTokens);
+//     expect(totalPresaleTokens).to.equal(0);
 //   });
 
 //   it("should refund users if min cap not reached", async function () {
@@ -146,10 +147,8 @@ describe("LiminalPresale", function () {
 //   });
 
 it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap", async function () {
-    const { owner, presale, lim, user1, swapHelper } = await loadFixture(deployFixture);
+    const { owner, presale, user1 } = await loadFixture(deployFixture);
     await presale.startPresale(3600); // 1-hour presale
-
-    const initialPresaleTokens = await presale.totalPresaleTokens();
 
     const ethValue = ethers.parseEther("0.5");
     const userCount = 19;
@@ -175,15 +174,52 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
         await presale.distributeTokens(100);
     }
 
-    const tokenRate = await presale.LIM_TOKEN_RATE();
-    const totalContributions = await presale.totalContributions();
-    const diference = initialPresaleTokens - (tokenRate * totalContributions);
+    const tokensDistributed = await presale.tokensDistributed();
+    console.log(`tokensDistributed : ${tokensDistributed}`);
 
     const totalPresaleTokens = await presale.totalPresaleTokens();
-    expect(diference).to.equal(totalPresaleTokens);
+    expect(totalPresaleTokens).to.equal(0);
+
+    await presale.createUniswapV4Pool();
+    
+    const totalPoolTokens = await presale.totalPoolTokens();
+    expect(totalPoolTokens).to.equal(0);
+
+    const totalContributions = await presale.totalContributions();
+    expect(totalContributions).to.equal(0);
+
+    // SWAP EXAMPLE
+    const poolKey = {
+        currency0: ethers.ZeroAddress,
+        currency1: limToken.target,
+        fee: 300,
+        tickSpacing: 60,
+        hooks: ethers.ZeroAddress
+    };
+    // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
+    await swapHelper.approveTokenWithPermit2(poolKey.currency1);
+
+    await swap(poolKey, true, ethers.parseUnits("0.1", 18), user1); //swap 0.1 ETH
+    await swap(poolKey, false, ethers.parseUnits("20000", 18), user1); //swap 20000 LIM
   });
 
 });
+
+// _zeroForOne = true for ETH -> LIM, false for LIM -> ETH
+async function swap(_poolKey, _zeroForOne, _amountIn, _user) {
+  if(_zeroForOne == false){
+    await limToken.connect(_user).approve(swapHelper.target, _amountIn);
+    console.log("✅ SWAP HELPER: Approved LIM tokens swap helper!");
+  }
+
+  const minAmountOut = ethers.parseUnits("0.0001", 18);     // Minimum expected output
+  const valueOfEth = _zeroForOne ? _amountIn : ethers.parseUnits("0", 18);
+  await swapHelper.connect(_user).swapExactInputSingle(_poolKey, _zeroForOne, _amountIn, minAmountOut, { value: valueOfEth });
+  console.log(`✅ Successfully swapped! ${_zeroForOne ? "ETH -> LIM" : "LIM -> ETH"}, amountIn: ${ethers.formatUnits(_amountIn, 18)}`);
+  
+  await log_TokenBalance(limToken, "LIM", _user.address, "User1");
+  await log_EthBalance(_user.address, "User1");
+}
 
 async function testAllowedContribution(contract, buyer){
     const getAllowedContribution = await contract.getAllowedContribution(buyer);

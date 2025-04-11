@@ -120,8 +120,12 @@ contract LiminalPresale is Ownable {
             processedBuyersCount++;
         }
 
-        if (totalPresaleTokens == 0){
+        if (processedBuyersCount >= buyers.length) {
             tokensDistributed = true;
+
+            //Burn the rest of the tokens if any
+            limToken.burn(totalPresaleTokens);
+            totalPresaleTokens = 0;
         }
     }
 
@@ -147,6 +151,8 @@ contract LiminalPresale is Ownable {
         IV4PoolHelper(v4PoolHelper).setupPermit2Approvals(address(0), address(limToken));
 
         uint256 limTokenAmount = totalContributions * LIM_TOKEN_RATE;
+        limToken.transfer(v4PoolHelper, limTokenAmount);
+
         PoolInput memory input = PoolInput({
             token0: address(0),
             token1: address(limToken),
@@ -158,6 +164,7 @@ contract LiminalPresale is Ownable {
             tickUpper: 149760
         });
         IV4PoolHelper(v4PoolHelper).createPoolAndAddLiquidity{value: totalContributions}(input);
+        totalContributions = 0;
         
         //Burn the rest of the tokens if any
         totalPoolTokens -= limTokenAmount;

@@ -32,11 +32,16 @@ describe("LiminalPresale", function () {
   });
 
   it("should finalize and distribute tokens correctly", async function () {
-    const { owner, presale, lim } = await loadFixture(deployFixture);
+    const { owner, presale, lim, user1 } = await loadFixture(deployFixture);
     await presale.startPresale(3600); // 1-hour presale
 
+    await testRemainingTime(presale, 10);
+
     const ethValue = ethers.parseEther("0.5");
-    const userCount = 20;
+    await presale.connect(user1).contribute({ value: ethValue });
+    await testAllowedContribution(presale, user1.address);
+
+    const userCount = 19;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
@@ -47,9 +52,11 @@ describe("LiminalPresale", function () {
         });
 
         await presale.connect(wallet).contribute({ value: ethValue });
-        console.log(`User ${i + 1} contributed ${ethValue} ETH`);
+        //console.log(`User ${i + 1} contributed ${ethValue} ETH`);
     }
     console.log(`${userCount} users contributed ${ethValue} ETH each.`);
+
+    await testGetterFunctions(presale);
 
     await ethers.provider.send("evm_increaseTime", [3600]);
     await ethers.provider.send("evm_mine");
@@ -76,7 +83,10 @@ describe("LiminalPresale", function () {
     await presale.startPresale(3600); // 1-hour presale
 
     const ethValue = ethers.parseEther("0.02");
-    const userCount = 349;
+    await presale.connect(user1).contribute({ value: ethValue });
+    await testAllowedContribution(presale, user1.address);
+
+    const userCount = 348;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
@@ -87,12 +97,16 @@ describe("LiminalPresale", function () {
         });
 
         await presale.connect(wallet).contribute({ value: ethValue });
-        console.log(`User ${i + 1} contributed ${ethValue} ETH`);
+        //console.log(`User ${i + 1} contributed ${ethValue} ETH`);
     }
     console.log(`${userCount} users contributed ${ethValue} ETH each.`);
 
+    await testGetterFunctions(presale);
+
     await ethers.provider.send("evm_increaseTime", [3600]);
     await ethers.provider.send("evm_mine");
+
+    await testRemainingTime(presale, 0);
 
     await presale.endPresale();
     for (let i = 0; i < 4; i++){
@@ -104,6 +118,30 @@ describe("LiminalPresale", function () {
   });
 
 });
+
+async function testAllowedContribution(contract, buyer){
+    const getAllowedContribution = await contract.getAllowedContribution(buyer);
+    console.log(`getAllowedContribution : ${getAllowedContribution}`)
+}
+
+async function testRemainingTime(contract, timeToIncrease){
+    await ethers.provider.send("evm_increaseTime", [timeToIncrease]);
+    await ethers.provider.send("evm_mine");
+    
+    const getRemainingTime = await contract.getRemainingTime();
+    console.log(`getRemainingTime : ${getRemainingTime}`)
+}
+
+async function testGetterFunctions(contract){
+    const minCapNotReached = await contract.minCapReached();
+    console.log(`minCapNotReached : ${minCapNotReached}`)
+
+    const buyersCount = await contract.getBuyersCount();
+    console.log(`buyersCount : ${buyersCount}`)
+
+    const getRemainingCap = await contract.getRemainingCap();
+    console.log(`getRemainingCap : ${getRemainingCap}`)
+}
 
 async function log_EthBalance(address, name) {
     let ethBalance = await ethers.provider.getBalance(address);

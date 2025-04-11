@@ -188,7 +188,17 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     const totalContributions = await presale.totalContributions();
     expect(totalContributions).to.equal(0);
 
-    // SWAP EXAMPLE
+    // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
+    await swapHelper.approveTokenWithPermit2(limToken.target);
+
+    await swap(true, ethers.parseUnits("0.1", 18), user1); //swap 0.1 ETH
+    await swap(false, ethers.parseUnits("20000", 18), user1); //swap 20000 LIM
+    await swap(false, ethers.parseUnits("20000", 18), user1); //swap 20000 LIM
+  });
+});
+
+// _zeroForOne = true for ETH -> LIM, false for LIM -> ETH
+async function swap(_zeroForOne, _amountIn, _user) {
     const poolKey = {
         currency0: ethers.ZeroAddress,
         currency1: limToken.target,
@@ -196,29 +206,19 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
         tickSpacing: 60,
         hooks: ethers.ZeroAddress
     };
-    // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
-    await swapHelper.approveTokenWithPermit2(poolKey.currency1);
-
-    await swap(poolKey, true, ethers.parseUnits("0.1", 18), user1); //swap 0.1 ETH
-    await swap(poolKey, false, ethers.parseUnits("20000", 18), user1); //swap 20000 LIM
-  });
-
-});
-
-// _zeroForOne = true for ETH -> LIM, false for LIM -> ETH
-async function swap(_poolKey, _zeroForOne, _amountIn, _user) {
-  if(_zeroForOne == false){
-    await limToken.connect(_user).approve(swapHelper.target, _amountIn);
-    console.log("✅ SWAP HELPER: Approved LIM tokens swap helper!");
-  }
-
-  const minAmountOut = ethers.parseUnits("0.0001", 18);     // Minimum expected output
-  const valueOfEth = _zeroForOne ? _amountIn : ethers.parseUnits("0", 18);
-  await swapHelper.connect(_user).swapExactInputSingle(_poolKey, _zeroForOne, _amountIn, minAmountOut, { value: valueOfEth });
-  console.log(`✅ Successfully swapped! ${_zeroForOne ? "ETH -> LIM" : "LIM -> ETH"}, amountIn: ${ethers.formatUnits(_amountIn, 18)}`);
   
-  await log_TokenBalance(limToken, "LIM", _user.address, "User1");
-  await log_EthBalance(_user.address, "User1");
+    if(_zeroForOne == false){
+        await limToken.connect(_user).approve(swapHelper.target, _amountIn);
+        //console.log("✅ SWAP HELPER: Approved LIM tokens swap helper!");
+    }
+
+    const minAmountOut = ethers.parseUnits("0.0001", 18);     // Minimum expected output
+    const valueOfEth = _zeroForOne ? _amountIn : ethers.parseUnits("0", 18);
+    await swapHelper.connect(_user).swapExactInputSingle(poolKey, _zeroForOne, _amountIn, minAmountOut, { value: valueOfEth });
+    console.log(`✅ Successfully swapped! ${_zeroForOne ? "ETH -> LIM" : "LIM -> ETH"}, amountIn: ${ethers.formatUnits(_amountIn, 18)}`);
+    
+    await log_TokenBalance(limToken, "LIM", _user.address, "User1");
+    await log_EthBalance(_user.address, "User1");
 }
 
 async function testAllowedContribution(contract, buyer){

@@ -111,7 +111,7 @@ async function main() {
 async function swap(_poolKey, _zeroForOne, _amountIn, _user) {
   if(_zeroForOne == false){
     await limToken.connect(_user).approve(swapHelper.target, _amountIn);
-    console.log("✅ SWAP HELPER: Approved LIM tokens swap helper!");
+    //console.log("✅ SWAP HELPER: Approved LIM tokens swap helper!");
   }
 
   const minAmountOut = ethers.parseUnits("0.0001", 18);     // Minimum expected output

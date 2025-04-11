@@ -14,7 +14,7 @@ describe("LiminalPresale", function () {
     const presale = await LiminalPresale.deploy(lim.target);
     await presale.waitForDeployment();
 
-    const presaleRewardInTokens = ethers.parseUnits("35000000", 18); // 35 mil LIM
+    const presaleRewardInTokens = ethers.parseUnits("30000000", 18); // 30 mil LIM
     await lim.connect(owner).approve(presale.target, presaleRewardInTokens)
     await presale.connect(owner).depositRewardTokens(presaleRewardInTokens);
 
@@ -47,7 +47,7 @@ describe("LiminalPresale", function () {
         });
 
         await presale.connect(wallet).contribute({ value: ethValue });
-        //console.log(`User ${i + 1} contributed ${ethValue} ETH`);
+        console.log(`User ${i + 1} contributed ${ethValue} ETH`);
     }
     console.log(`${userCount} users contributed ${ethValue} ETH each.`);
 
@@ -75,9 +75,9 @@ describe("LiminalPresale", function () {
 
     await presale.startPresale(3600); // 1-hour presale
 
-    const ethValue = ethers.parseEther("0.01");
-    const userCount = 799;
-    for (let i = 0; i < 799; i++) {
+    const ethValue = ethers.parseEther("0.02");
+    const userCount = 349;
+    for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
         // Fund the wallet with ETH
@@ -87,7 +87,7 @@ describe("LiminalPresale", function () {
         });
 
         await presale.connect(wallet).contribute({ value: ethValue });
-        //console.log(`User ${i + 1} contributed ${ethValue} ETH`);
+        console.log(`User ${i + 1} contributed ${ethValue} ETH`);
     }
     console.log(`${userCount} users contributed ${ethValue} ETH each.`);
 
@@ -95,7 +95,7 @@ describe("LiminalPresale", function () {
     await ethers.provider.send("evm_mine");
 
     await presale.endPresale();
-    for (let i = 0; i < 8; i++){
+    for (let i = 0; i < 4; i++){
         await presale.refundUsers(100);
     }
 

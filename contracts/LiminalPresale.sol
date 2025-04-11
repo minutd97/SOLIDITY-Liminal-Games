@@ -4,6 +4,9 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./LiminalToken.sol";
 
+/// @dev Only include this during Hardhat testing
+import "hardhat/console.sol";
+
 contract LiminalPresale is Ownable {
     LiminalToken public immutable limToken;
     
@@ -14,11 +17,11 @@ contract LiminalPresale is Ownable {
     uint256 public maxModifications = 2;
 
     uint256 public constant WALLET_MAX_CONTRIBUTION = 0.5 ether;
-    uint256 public constant WALLET_MIN_CONTRIBUTION = 0.01 ether;
+    uint256 public constant WALLET_MIN_CONTRIBUTION = 0.02 ether;
 
     uint256 public constant BPS_DENOMINATOR = 10000;
-    uint256 public constant MIN_CAP_BPS = 8000; // 80%
-    uint256 public constant LIM_TOKEN_RATE = 3500000;   // 3500000 LIM per ETH
+    uint256 public constant MIN_CAP_BPS = 7000; // 70%
+    uint256 public constant LIM_TOKEN_RATE = 3000000; // 3000000 LIM per ETH
 
     bool public presaleEnded = false;
     uint256 public processedBuyersCount = 0;

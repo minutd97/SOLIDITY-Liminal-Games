@@ -7,8 +7,20 @@ import "./LiminalToken.sol";
 /// @dev Only include this during Hardhat testing
 import "hardhat/console.sol";
 
+struct PoolInput {
+    address token0;
+    address token1;
+    uint256 amount0;
+    uint256 amount1;
+    uint24 fee;
+    int24 tickSpacing;
+    int24 tickLower;
+    int24 tickUpper;
+}
+
 interface IV4PoolHelper {
-    function createPoolAndAddLiquidity() external;
+    function setupPermit2Approvals(address token0, address token1) external;
+    function createPoolAndAddLiquidity(PoolInput calldata input) external payable;
 }
 
 contract LiminalPresale is Ownable {
@@ -26,10 +38,11 @@ contract LiminalPresale is Ownable {
 
     uint256 public constant BPS_DENOMINATOR = 10000;
     uint256 public constant MIN_CAP_BPS = 7000; // 70%
-    uint256 public constant LIM_TOKEN_RATE = 3000000; // 3000000 LIM per ETH
+    uint256 public constant LIM_TOKEN_RATE = 3000000; // 3000000 LIM per 1 ETH
 
     bool public presaleEnded = false;
     uint256 public processedBuyersCount = 0;
+    bool public tokensDistributed = false;
 
     uint256 public totalPoolTokens;
     uint256 public totalPresaleTokens;
@@ -106,6 +119,10 @@ contract LiminalPresale is Ownable {
             totalPresaleTokens -= tokensToTransfer;
             processedBuyersCount++;
         }
+
+        if (totalPresaleTokens == 0){
+            tokensDistributed = true;
+        }
     }
 
     function refundUsers(uint256 batchCount) external onlyOwner {
@@ -123,6 +140,29 @@ contract LiminalPresale is Ownable {
             }
             processedBuyersCount++;
         }
+    }
+
+    function createUniswapV4Pool() external onlyOwner {
+        require(tokensDistributed, "Tokens are not distributed");
+        IV4PoolHelper(v4PoolHelper).setupPermit2Approvals(address(0), address(limToken));
+
+        uint256 limTokenAmount = totalContributions * LIM_TOKEN_RATE;
+        PoolInput memory input = PoolInput({
+            token0: address(0),
+            token1: address(limToken),
+            amount0: totalContributions,
+            amount1: limTokenAmount,
+            fee: 300,
+            tickSpacing: 60,
+            tickLower: 148560,
+            tickUpper: 149760
+        });
+        IV4PoolHelper(v4PoolHelper).createPoolAndAddLiquidity{value: totalContributions}(input);
+        
+        //Burn the rest of the tokens if any
+        totalPoolTokens -= limTokenAmount;
+        limToken.burn(totalPoolTokens);
+        totalPoolTokens = 0;
     }
 
     function depositPoolTokens(uint256 amount) external onlyOwner {

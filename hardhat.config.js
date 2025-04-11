@@ -3,6 +3,8 @@ require("hardhat-gas-reporter");
 require("hardhat-tracer");
 require("dotenv").config();
 
+const FORK_MAINNET = process.env.FORK_MAINNET;
+
 module.exports = {
   solidity: {
     version: "0.8.26",
@@ -20,10 +22,10 @@ module.exports = {
 
   networks: {
     hardhat: {
-      // forking: {
-      //   url: FORK_MAINNET ? "https://arb-mainnet.g.alchemy.com/v2/XNZLa2FrNs3uRaESVLHIb1XrNsUmpMmH" : "https://sepolia-rollup.arbitrum.io/rpc",
-      //   //blockNumber: 321922670,
-      // },
+      forking: {
+        url: FORK_MAINNET ? "https://arb-mainnet.g.alchemy.com/v2/XNZLa2FrNs3uRaESVLHIb1XrNsUmpMmH" : "https://sepolia-rollup.arbitrum.io/rpc",
+        //blockNumber: 321922670,
+      },
       chainId: 31337,
       mining: {
         auto: true,

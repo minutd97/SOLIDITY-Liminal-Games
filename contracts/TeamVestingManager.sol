@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/finance/VestingWallet.sol";
+import "./RevocableVestingWallet.sol";
 
 contract TeamVestingManager is Ownable {
     struct VestingInfo {
@@ -39,7 +39,7 @@ contract TeamVestingManager is Ownable {
         require(vestingWallets[beneficiary].wallet == address(0), "Already created");
         require(cliffDuration <= duration, "Cliff > duration");
 
-        VestingWallet wallet = new VestingWallet(
+        RevocableVestingWallet wallet = new RevocableVestingWallet(
             beneficiary,
             startTimestamp + cliffDuration,
             duration
@@ -76,25 +76,31 @@ contract TeamVestingManager is Ownable {
     function releaseVestedTokensERC20(address beneficiary, address token) external {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
-        VestingWallet(payable(wallet)).release(token);
+        RevocableVestingWallet(payable(wallet)).release(token);
     }
 
     function releaseVestedETH(address beneficiary) external {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
-        VestingWallet(payable(wallet)).release();
+        RevocableVestingWallet(payable(wallet)).release();
     }
 
     function releasableAmountERC20(address beneficiary, address token) external view returns (uint256) {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
-        return VestingWallet(payable(wallet)).releasable(token);
+        return RevocableVestingWallet(payable(wallet)).releasable(token);
     }
 
     function releasableETH(address beneficiary) external view returns (uint256) {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
-        return VestingWallet(payable(wallet)).releasable();
+        return RevocableVestingWallet(payable(wallet)).releasable();
+    }
+
+    function revokeVesting(address beneficiary) external onlyOwner {
+        address wallet = vestingWallets[beneficiary].wallet;
+        require(wallet != address(0), "Wallet not found");
+        RevocableVestingWallet(payable(wallet)).revoke();
     }
 
     function getAllVestingWallets() external view returns (address[] memory) {

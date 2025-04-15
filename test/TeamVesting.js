@@ -6,7 +6,7 @@ function toUnits(amount) {
   return ethers.parseUnits(amount.toString(), 18);
 }
 
-describe("TeamVestingManager", function () {
+describe("TeamVesting", function () {
   async function deployFixture() {
     const [owner, user1] = await ethers.getSigners();
 
@@ -14,7 +14,7 @@ describe("TeamVestingManager", function () {
     const token = await Token.deploy();
     await token.waitForDeployment();
 
-    const Manager = await ethers.getContractFactory("TeamVestingManager");
+    const Manager = await ethers.getContractFactory("TeamVestingController");
     const manager = await Manager.deploy();
     await manager.waitForDeployment();
 

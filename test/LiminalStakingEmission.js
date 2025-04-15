@@ -6,7 +6,7 @@ function toUnits(amount) {
   return BigInt(ethers.parseUnits(amount.toString(), 18));
 }
 
-describe("LiminalEmissionController", function () {
+describe("LiminalStakingEmission", function () {
   async function deployFixture() {
     const [owner, user1] = await ethers.getSigners();
 
@@ -18,7 +18,7 @@ describe("LiminalEmissionController", function () {
     const pool = await Pool.deploy(await lim.getAddress());
     await pool.waitForDeployment();
 
-    const Controller = await ethers.getContractFactory("LiminalEmissionController");
+    const Controller = await ethers.getContractFactory("LiminalStakingEmission");
     const controller = await Controller.deploy(await lim.getAddress(), await pool.getAddress());
     await controller.waitForDeployment();
 

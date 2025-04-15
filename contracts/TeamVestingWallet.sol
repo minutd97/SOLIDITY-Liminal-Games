@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/finance/VestingWallet.sol";
 
-contract RevocableVestingWallet is VestingWallet {
+contract TeamVestingWallet is VestingWallet {
     bool public revoked;
     uint64 public revokedAt;
 

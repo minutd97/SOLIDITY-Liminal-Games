@@ -8,7 +8,7 @@ interface ILiminalStakingPool {
     function loadRewardPool(uint256 amount) external;
 }
 
-contract LiminalEmissionController is Ownable {
+contract LiminalStakingEmission is Ownable {
     IERC20 public immutable limToken;
     address public immutable stakingPool;
 

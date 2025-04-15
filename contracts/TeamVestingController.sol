@@ -3,9 +3,12 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./TeamVestingWallet.sol";
 
-contract TeamVestingController is Ownable {
+contract TeamVestingController is Ownable, AccessControl {
+    bytes32 public constant WALLET_FUNDER_ROLE = keccak256("WALLET_FUNDER_ROLE");
+    
     struct VestingInfo {
         address wallet;
         address beneficiary;
@@ -19,14 +22,10 @@ contract TeamVestingController is Ownable {
 
     event VestingWalletCreated(address indexed beneficiary, address vestingWallet, uint64 startTimestamp, uint64 duration, uint64 cliff);
     event TokensFunded(address indexed beneficiary, address indexed token, uint256 amount);
-    event FactoryFinalized();
 
-    modifier notFinalized() {
-        require(!finalized, "Factory is finalized");
-        _;
+    constructor() Ownable(msg.sender) {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
-
-    constructor() Ownable(msg.sender) {}
 
     /// @notice Creates a new vesting wallet with cliff and linear vesting
     function createVestingWallet(
@@ -34,7 +33,7 @@ contract TeamVestingController is Ownable {
         uint64 startTimestamp,           // when vesting starts (TGE for example)
         uint64 duration,                // total duration after start (e.g. 12 months)
         uint64 cliffDuration            // how long before first tokens unlock (e.g. 30 days)
-    ) external onlyOwner notFinalized {
+    ) external onlyOwner {
         require(beneficiary != address(0), "Invalid beneficiary");
         require(vestingWallets[beneficiary].wallet == address(0), "Already created");
         require(cliffDuration <= duration, "Cliff > duration");
@@ -57,7 +56,7 @@ contract TeamVestingController is Ownable {
         emit VestingWalletCreated(beneficiary, address(wallet), startTimestamp, duration, cliffDuration);
     }
 
-    function fundERC20ToWallet(address beneficiary, address token, uint256 amount) external onlyOwner {
+    function fundERC20ToWallet(address beneficiary, address token, uint256 amount) external onlyRole(WALLET_FUNDER_ROLE) {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
         bool success = IERC20(token).transferFrom(msg.sender, wallet, amount);
@@ -65,7 +64,7 @@ contract TeamVestingController is Ownable {
         emit TokensFunded(beneficiary, token, amount);
     }
 
-    function fundETHToWallet(address beneficiary) external payable onlyOwner {
+    function fundETHToWallet(address beneficiary) external payable onlyRole(WALLET_FUNDER_ROLE) {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
         (bool success, ) = wallet.call{ value: msg.value }("");
@@ -85,6 +84,20 @@ contract TeamVestingController is Ownable {
         TeamVestingWallet(payable(wallet)).release();
     }
 
+    function revokeVesting(address beneficiary) external onlyOwner {
+        address wallet = vestingWallets[beneficiary].wallet;
+        require(wallet != address(0), "Wallet not found");
+        TeamVestingWallet(payable(wallet)).revoke();
+    }
+
+    function grantFunderRole(address account) public onlyOwner {
+        grantRole(WALLET_FUNDER_ROLE, account);
+    }
+
+    function revokeFunderRole(address account) public onlyOwner {
+        revokeRole(WALLET_FUNDER_ROLE, account);
+    }
+
     function releasableAmountERC20(address beneficiary, address token) external view returns (uint256) {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
@@ -97,22 +110,11 @@ contract TeamVestingController is Ownable {
         return TeamVestingWallet(payable(wallet)).releasable();
     }
 
-    function revokeVesting(address beneficiary) external onlyOwner {
-        address wallet = vestingWallets[beneficiary].wallet;
-        require(wallet != address(0), "Wallet not found");
-        TeamVestingWallet(payable(wallet)).revoke();
-    }
-
     function getAllVestingWallets() external view returns (address[] memory) {
         return allVestingWallets;
     }
 
     function getVestingWallet(address beneficiary) external view returns (address) {
         return vestingWallets[beneficiary].wallet;
-    }
-
-    function finalize() external onlyOwner {
-        finalized = true;
-        emit FactoryFinalized();
     }
 }

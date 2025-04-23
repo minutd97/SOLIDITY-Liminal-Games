@@ -80,7 +80,7 @@ describe("TeamVesting", function () {
 
     // 💸 Release ERC20 tokens and confirm balance increased correctly
     const balanceBeforeERC20 = await token.balanceOf(user1.address);
-    await manager.releaseVestedTokensERC20(user1.address, await token.getAddress());
+    await manager.releaseVestedERC20(user1.address, await token.getAddress());
     const balanceAfterERC20 = await token.balanceOf(user1.address);
     const releasedERC20 = balanceAfterERC20 - balanceBeforeERC20;
     expect(releasedERC20).to.be.closeTo(expectedERC20, ethers.parseUnits("0.01", 18));

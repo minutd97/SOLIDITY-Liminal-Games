@@ -4,10 +4,12 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./TeamVestingWallet.sol";
 
-contract TeamVestingController is Ownable, AccessControl {
+contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
     bytes32 public constant WALLET_FUNDER_ROLE = keccak256("WALLET_FUNDER_ROLE");
+    address public immutable vault;
     
     struct VestingInfo {
         address wallet;
@@ -30,9 +32,10 @@ contract TeamVestingController is Ownable, AccessControl {
     /// @notice Creates a new vesting wallet with cliff and linear vesting
     function createVestingWallet(
         address beneficiary,
-        uint64 startTimestamp,           // when vesting starts (TGE for example)
+        uint64 startTimestamp,          // when vesting starts (TGE for example)
         uint64 duration,                // total duration after start (e.g. 12 months)
-        uint64 cliffDuration            // how long before first tokens unlock (e.g. 30 days)
+        uint64 cliffDuration,           // how long before first tokens unlock (e.g. 30 days)
+        address vaultAddress            
     ) external onlyOwner {
         require(beneficiary != address(0), "Invalid beneficiary");
         require(vestingWallets[beneficiary].wallet == address(0), "Already created");
@@ -41,7 +44,8 @@ contract TeamVestingController is Ownable, AccessControl {
         TeamVestingWallet wallet = new TeamVestingWallet(
             beneficiary,
             startTimestamp + cliffDuration,
-            duration
+            duration,
+            vaultAddress
         );
 
         vestingWallets[beneficiary] = VestingInfo({
@@ -72,13 +76,13 @@ contract TeamVestingController is Ownable, AccessControl {
         emit TokensFunded(beneficiary, address(0), msg.value);
     }
 
-    function releaseVestedTokensERC20(address beneficiary, address token) external {
+    function releaseVestedERC20(address beneficiary, address token) external nonReentrant {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
         TeamVestingWallet(payable(wallet)).release(token);
     }
 
-    function releaseVestedETH(address beneficiary) external {
+    function releaseVestedETH(address beneficiary) external nonReentrant {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
         TeamVestingWallet(payable(wallet)).release();

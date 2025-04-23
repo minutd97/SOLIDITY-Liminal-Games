@@ -9,6 +9,9 @@ interface ITeamVestingController {
     function fundETHToWallet(address beneficiary) external payable;
 }
 
+/// @title Team Vesting Vault
+/// @notice Stores and releases tokens to TeamVestingController wallets over time, with rate limits per token.
+/// @dev Supports rate-limited release of ETH and ERC20 tokens to beneficiaries through the controller.
 contract TeamVestingVault is Ownable {
     address public immutable teamVestingManager;
 
@@ -30,7 +33,7 @@ contract TeamVestingVault is Ownable {
         teamVestingManager = _teamVestingManager;
     }
 
-    /// @notice Sets the release rate for an ERC20 token, cannot overwrite once set
+    /// @notice Sets a one-time release rate for an ERC20 token in tokens per second.
     function setERC20ReleaseRate(address token, uint256 ratePerSecond) external onlyOwner {
         require(token != address(0), "Invalid token");
         require(ratePerSecond > 0, "Rate must be positive");
@@ -45,7 +48,7 @@ contract TeamVestingVault is Ownable {
         });
     }
 
-    /// @notice Sets the release rate for native ETH, cannot overwrite once set
+    /// @notice Sets a one-time release rate for native ETH in wei per second.
     function setETHReleaseRate(uint256 ratePerSecond) external onlyOwner {
         require(ratePerSecond > 0, "Rate must be positive");
         require(ethReleaseRate.startTime == 0, "ETH rate already set"); // cannot overwrite once set
@@ -57,7 +60,7 @@ contract TeamVestingVault is Ownable {
         });
     }
 
-    /// @notice Sends ERC20 tokens to the vesting controller for a beneficiary
+    /// @notice Sends a specified amount of ERC20 tokens to the vesting controller for a given beneficiary, respecting release rate.
     function releaseTokensTo(address beneficiary, address token, uint256 amount) external onlyOwner {
         require(token != address(0), "Invalid token");
 
@@ -80,7 +83,7 @@ contract TeamVestingVault is Ownable {
         emit TokensReleased(beneficiary, token, amount);
     }
 
-    /// @notice Sends ETH to the vesting controller for a beneficiary
+    /// @notice Sends a specified amount of ETH to the vesting controller for a given beneficiary, respecting release rate.
     function releaseETHTo(address beneficiary, uint256 amount) external onlyOwner {
         require(ethReleaseRate.startTime > 0, "ETH rate not set");
 
@@ -96,7 +99,7 @@ contract TeamVestingVault is Ownable {
         emit ETHReleased(beneficiary, amount);
     }
 
-    /// View functions
+    /// @notice Returns the current amount of ERC20 tokens available to be released based on the release rate and elapsed time.
     function releasableTokenAmount(address token) external view returns (uint256) {
         ReleaseRate memory rate = tokenReleaseRates[token];
         if (rate.startTime == 0) return 0;
@@ -111,6 +114,7 @@ contract TeamVestingVault is Ownable {
         return available > balance ? balance : available;
     }
 
+    /// @notice Returns the current amount of ETH available to be released based on the release rate and elapsed time.
     function releasableETHAmount() external view returns (uint256) {
         ReleaseRate memory rate = ethReleaseRate;
         if (rate.startTime == 0) return 0;
@@ -125,13 +129,16 @@ contract TeamVestingVault is Ownable {
         return available > balance ? balance : available;
     }
 
+    /// @notice Returns the current balance of a specific ERC20 token held by the vault.
     function remainingTokenBalance(address token) external view returns (uint256) {
         return IERC20(token).balanceOf(address(this));
     }
 
+    /// @notice Returns the current ETH balance held by the vault.
     function remainingETHBalance() external view returns (uint256) {
         return address(this).balance;
     }
 
+    /// @notice Accepts direct ETH transfers into the vault.
     receive() external payable {}
 }

@@ -5,6 +5,9 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/finance/VestingWallet.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+/// @title Team Vesting Wallet
+/// @notice A revocable, linear vesting wallet with optional cliff, inheriting OpenZeppelin VestingWallet.
+/// @dev After revocation, only vested tokens can be claimed; unvested tokens must be sent to a vault.
 contract TeamVestingWallet is VestingWallet, AccessControl {
     bytes32 public constant WALLET_CONTROLLER_ROLE = keccak256("WALLET_CONTROLLER_ROLE");
 
@@ -23,12 +26,14 @@ contract TeamVestingWallet is VestingWallet, AccessControl {
         grantRole(WALLET_CONTROLLER_ROLE, msg.sender);
     }
 
+    /// @notice Revokes the vesting schedule, freezing future vesting at the time of revocation.
     function revoke() external onlyRole(WALLET_CONTROLLER_ROLE) {
         require(!revoked, "Already revoked");
         revoked = true;
         revokedAt = uint64(block.timestamp);
     }
 
+    /// @notice Transfers unvested ERC20 tokens to the designated vault after vesting has been revoked.
     function fundVaultWithLeftoverERC20(address token) external onlyRole(WALLET_CONTROLLER_ROLE) {
         require(revoked, "Vesting not revoked");
 
@@ -40,6 +45,7 @@ contract TeamVestingWallet is VestingWallet, AccessControl {
         IERC20(token).transfer(vault, unvested);
     }
 
+    /// @notice Transfers unvested native ETH to the designated vault after vesting has been revoked.
     function fundVaultWithLeftoverETH() external onlyRole(WALLET_CONTROLLER_ROLE) {
         require(revoked, "Vesting not revoked");
 
@@ -52,6 +58,7 @@ contract TeamVestingWallet is VestingWallet, AccessControl {
         require(success, "ETH transfer failed");
     }
 
+    /// @notice Internal override of the vesting schedule to cap vesting at the revocation timestamp, if revoked.
     function _vestingSchedule(
         uint256 totalAllocation,
         uint64 timestamp

@@ -97,14 +97,6 @@ contract TeamVestingVault is Ownable {
     }
 
     /// View functions
-    function remainingTokenBalance(address token) external view returns (uint256) {
-        return IERC20(token).balanceOf(address(this));
-    }
-
-    function remainingETHBalance() external view returns (uint256) {
-        return address(this).balance;
-    }
-
     function releasableTokenAmount(address token) external view returns (uint256) {
         ReleaseRate memory rate = tokenReleaseRates[token];
         if (rate.startTime == 0) return 0;
@@ -131,6 +123,14 @@ contract TeamVestingVault is Ownable {
         uint256 available = maxAllowed - rate.releasedSoFar;
         uint256 balance = address(this).balance;
         return available > balance ? balance : available;
+    }
+
+    function remainingTokenBalance(address token) external view returns (uint256) {
+        return IERC20(token).balanceOf(address(this));
+    }
+
+    function remainingETHBalance() external view returns (uint256) {
+        return address(this).balance;
     }
 
     receive() external payable {}

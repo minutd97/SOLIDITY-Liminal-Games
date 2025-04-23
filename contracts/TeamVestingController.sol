@@ -105,14 +105,6 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
         TeamVestingWallet(payable(wallet)).fundVaultWithLeftoverETH();
     }
 
-    function grantFunderRole(address account) public onlyOwner {
-        grantRole(WALLET_FUNDER_ROLE, account);
-    }
-
-    function revokeFunderRole(address account) public onlyOwner {
-        revokeRole(WALLET_FUNDER_ROLE, account);
-    }
-
     function releasableAmountERC20(address beneficiary, address token) external view returns (uint256) {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
@@ -131,5 +123,13 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
 
     function getVestingWallet(address beneficiary) external view returns (address) {
         return vestingWallets[beneficiary].wallet;
+    }
+
+    function grantFunderRole(address account) public onlyOwner {
+        grantRole(WALLET_FUNDER_ROLE, account);
+    }
+
+    function revokeFunderRole(address account) public onlyOwner {
+        revokeRole(WALLET_FUNDER_ROLE, account);
     }
 }

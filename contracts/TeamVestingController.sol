@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./TeamVestingWallet.sol";
 
 contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
@@ -92,6 +92,18 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
         TeamVestingWallet(payable(wallet)).revoke();
+    }
+
+    function reclaimUnvestedERC20(address beneficiary, address token) external onlyOwner {
+        address wallet = vestingWallets[beneficiary].wallet;
+        require(wallet != address(0), "Wallet not found");
+        TeamVestingWallet(payable(wallet)).fundVaultWithLeftoverERC20(token);
+    }
+
+    function reclaimUnvestedETH(address beneficiary) external onlyOwner {
+        address wallet = vestingWallets[beneficiary].wallet;
+        require(wallet != address(0), "Wallet not found");
+        TeamVestingWallet(payable(wallet)).fundVaultWithLeftoverETH();
     }
 
     function grantFunderRole(address account) public onlyOwner {

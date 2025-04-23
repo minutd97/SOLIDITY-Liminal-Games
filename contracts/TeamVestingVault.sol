@@ -30,7 +30,7 @@ contract TeamVestingVault is Ownable {
         teamVestingManager = _teamVestingManager;
     }
 
-    /// @notice Sets the release rate for an ERC20 token
+    /// @notice Sets the release rate for an ERC20 token, cannot overwrite once set
     function setTokenReleaseRate(address token, uint256 ratePerSecond) external onlyOwner {
         require(token != address(0), "Invalid token");
         require(ratePerSecond > 0, "Rate must be positive");
@@ -45,7 +45,7 @@ contract TeamVestingVault is Ownable {
         });
     }
 
-    /// @notice Sets the release rate for native ETH
+    /// @notice Sets the release rate for native ETH, cannot overwrite once set
     function setETHReleaseRate(uint256 ratePerSecond) external onlyOwner {
         require(ratePerSecond > 0, "Rate must be positive");
         require(ethReleaseRate.startTime == 0, "ETH rate already set"); // cannot overwrite once set

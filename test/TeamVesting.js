@@ -18,101 +18,131 @@ describe("TeamVesting", function () {
     const manager = await Manager.deploy();
     await manager.waitForDeployment();
 
+    const Vault = await ethers.getContractFactory("TeamVestingVault");
+    const vault = await Vault.deploy(manager.target);
+    await vault.waitForDeployment();
+
     const now = Math.floor(Date.now() / 1000);
     const cliff = 30 * 24 * 60 * 60;
     const duration = 365 * 24 * 60 * 60;
 
-    const Vault = await ethers.getContractFactory("TeamVestingVault");
-    const vault = await Vault.deploy(manager.target, token.target, now + duration + cliff);
-    await vault.waitForDeployment();
+    const vestingAmount = toUnits(100_000);
+    const ethAmount = ethers.parseEther("10");
 
-    const vaultLockedAmount = toUnits(100_000);
-    await token.approve(vault.target, vaultLockedAmount);
-    await token.transfer(vault.target, vaultLockedAmount);
-
-    //Grant roles
+    // Setup roles and vesting
     await manager.grantFunderRole(owner.address);
     await manager.grantFunderRole(vault.target);
+    await manager.createVestingWallet(user1.address, now, duration, cliff, vault.target);
 
-    await manager.createVestingWallet(user1.address, now, duration, cliff);
     const vestingWalletAddr = await manager.getVestingWallet(user1.address);
 
-    const vestingAmount = toUnits(100_000);
+    // Fund vesting wallet directly (simulate custom funding)
     await token.approve(manager.getAddress(), vestingAmount);
     await manager.fundERC20ToWallet(user1.address, token.getAddress(), vestingAmount);
-
-    const ethAmount = ethers.parseEther("10");
     await manager.fundETHToWallet(user1.address, { value: ethAmount });
 
-    return { owner, user1, token, manager, vestingWalletAddr, vestingAmount, ethAmount, now, duration, cliff, vault };
+    // Fund vault with new tokens to release later
+    const vaultLockedAmount = toUnits(50_000);
+    await token.transfer(vault.target, vaultLockedAmount);
+    await vault.setTokenReleaseRate(token.getAddress(), toUnits(1)); // 1 token/sec
+
+    await vault.setETHReleaseRate(ethers.parseEther("0.5")); // 0.5 ETH/sec
+    await owner.sendTransaction({ to: vault.target, value: ethers.parseEther("10") });
+
+    return { owner, user1, token, manager, vestingWalletAddr, vestingAmount, ethAmount, now, duration, cliff, vault, vaultLockedAmount };
   }
 
-  it("should correctly handle ERC20 + ETH vesting and support all public functions", async function () {
-    const { user1, token, manager, vestingWalletAddr, vestingAmount, ethAmount, now, duration, cliff, vault } = await loadFixture(deployFixture);
+  it("should support full vesting flow: release, revoke, vault logic", async function () {
+    const { user1, token, manager, vestingWalletAddr, vestingAmount, ethAmount, now, duration, cliff, vault, vaultLockedAmount } = await loadFixture(deployFixture);
 
-    // ✅ Validate that the vesting wallet was created and stored properly
-    const wallets = await manager.getAllVestingWallets();
-    expect(wallets.length).to.equal(1);
-    expect(wallets[0]).to.equal(vestingWalletAddr);
+    // Confirm wallet setup
+    const wallet = await manager.getVestingWallet(user1.address);
+    expect(wallet).to.equal(vestingWalletAddr);
 
-    const walletFromGetter = await manager.getVestingWallet(user1.address);
-    expect(walletFromGetter).to.equal(vestingWalletAddr);
+    // Releasable before cliff = 0
+    await time.increaseTo(now + cliff - 10);
+    expect(await manager.releasableAmountERC20(user1.address, token.getAddress())).to.equal(0n);
+    expect(await manager.releasableETH(user1.address)).to.equal(0n);
 
-    // ⏱️ Advance time to just before the cliff ends
-    await time.increaseTo(now + cliff - 1);
-
-    // 📦 Check how much is releasable just before the cliff — should be 0
-    let erc20Releasable = await manager.releasableAmountERC20(user1.address, await token.getAddress());
-    let ethReleasable = await manager.releasableETH(user1.address);
-    expect(erc20Releasable).to.equal(0n);
-    expect(ethReleasable).to.equal(0n);
-
-    // ⏱️ Jump to halfway through the vesting duration
+    // After 6 months
     const sixMonths = BigInt(duration) / 2n;
     await time.increaseTo(now + cliff + Number(sixMonths));
 
-    // ✅ Calculate expected ERC20 tokens released (linear formula)
-    const expectedERC20 = (vestingAmount * sixMonths) / BigInt(duration);
-    erc20Releasable = await manager.releasableAmountERC20(user1.address, await token.getAddress());
-    console.log("ERC20 Expected:", expectedERC20.toString());
-    console.log("ERC20 Releasable:", erc20Releasable.toString());
-    expect(erc20Releasable).to.equal(expectedERC20);
+    // Check and release ERC20
+    const expectedTokens = (vestingAmount * sixMonths) / BigInt(duration);
+    const releasableTokens = await manager.releasableAmountERC20(user1.address, token.getAddress());
+    expect(releasableTokens).to.equal(expectedTokens);
 
-    // 💸 Release ERC20 tokens and confirm balance increased correctly
-    const balanceBeforeERC20 = await token.balanceOf(user1.address);
-    await manager.releaseVestedERC20(user1.address, await token.getAddress());
-    const balanceAfterERC20 = await token.balanceOf(user1.address);
-    const releasedERC20 = balanceAfterERC20 - balanceBeforeERC20;
-    expect(releasedERC20).to.be.closeTo(expectedERC20, ethers.parseUnits("0.01", 18));
-    console.log("ERC20 Released:", ethers.formatUnits(releasedERC20));
+    await manager.releaseVestedERC20(user1.address, token.getAddress());
 
-    // ✅ Calculate expected ETH released (same logic as ERC20)
+    // Check and release ETH
     const expectedETH = (ethAmount * sixMonths) / BigInt(duration);
-    ethReleasable = await manager.releasableETH(user1.address);
-    console.log("ETH Expected:", ethers.formatEther(expectedETH));
-    console.log("ETH Releasable:", ethers.formatEther(ethReleasable));
-    expect(ethReleasable).to.be.closeTo(expectedETH, ethers.parseEther("0.001"));
+    const releasableETH = await manager.releasableETH(user1.address);
+    expect(releasableETH).to.be.closeTo(expectedETH, ethers.parseEther("0.001"));
 
-    // 💸 Release ETH and account for gas cost in net balance change
     const balanceBeforeETH = await ethers.provider.getBalance(user1.address);
     const tx = await manager.connect(user1).releaseVestedETH(user1.address);
     const receipt = await tx.wait();
-    const gasUsed = receipt.gasUsed * receipt.gasPrice;
-
+    const gas = receipt.gasUsed * receipt.gasPrice;
     const balanceAfterETH = await ethers.provider.getBalance(user1.address);
-    const releasedETH = balanceAfterETH - balanceBeforeETH + gasUsed;
+    const receivedETH = balanceAfterETH - balanceBeforeETH + gas;
+    expect(receivedETH).to.be.closeTo(releasableETH, ethers.parseEther("0.001"));
 
-    console.log("ETH Released:", ethers.formatEther(releasedETH));
-    expect(releasedETH).to.be.closeTo(expectedETH, ethers.parseEther("0.001"));
+    // Revoke the wallet
+    await manager.revokeVesting(user1.address);
 
-    // ⏱️ Jump to right before we can releaseTokensTo from Team Vesting Vault
-    await time.increaseTo(now + duration + cliff - 2);
-    await expect(vault.releaseTokensTo(user1.address, ethers.parseUnits("100000", 18))).to.be.revertedWith("Tokens not unlocked yet");
+    // Attempt to release again later — should stay frozen
+    await time.increase(60 * 60 * 24 * 30); // +1 month
+    expect(await manager.releasableAmountERC20(user1.address, token.getAddress())).to.equal(0n);
 
-    // ⏱️ Jump to releaseTokensTo from Team Vesting Vault
-    await time.increaseTo(now + duration + cliff);
-    await vault.releaseTokensTo(user1.address, ethers.parseUnits("100000", 18));
-    const remainingVaultBalance = await vault.remainingTokenBalance();
-    expect(remainingVaultBalance).to.equal(0n);
+    // Fund vault → release rate-limited ERC20
+    await time.increase(100); // wait 100 seconds
+    const releasableFromVault = await vault.releasableTokenAmount(token.getAddress());
+    expect(releasableFromVault).to.equal(toUnits(100));
+
+    await vault.releaseTokensTo(user1.address, token.getAddress(), toUnits(100));
+
+    // Rate-limited ETH release
+    const releasableETHFromVault = await vault.releasableETHAmount();
+    expect(releasableETHFromVault).to.be.closeTo(ethers.parseEther("50"), ethers.parseEther("0.5"));
+
+    await vault.releaseETHTo(user1.address, releasableETHFromVault);
   });
+
+  it("should allow revoked wallet to return unvested tokens and ETH to the vault", async function () {
+    const { user1, token, manager, vestingWalletAddr, vault, now, duration, cliff } = await loadFixture(deployFixture);
+  
+    const wallet = await ethers.getContractAt("TeamVestingWallet", vestingWalletAddr);
+    const vaultERC20Before = await token.balanceOf(vault.target);
+    const vaultETHBefore = await ethers.provider.getBalance(vault.target);
+  
+    // Simulate partial vesting
+    await time.increaseTo(now + cliff + Number(duration / 4)); // 3 months in
+  
+    // Revoke the wallet
+    await manager.revokeVesting(user1.address);
+  
+    // Fetch releasable (vested) amounts
+    const releasableToken = await wallet.releasable(token.getAddress());
+    const releasableETH = await wallet.releasable();
+  
+    // Release vested amounts to user
+    await manager.releaseVestedERC20(user1.address, token.getAddress());
+    await manager.connect(user1).releaseVestedETH(user1.address);
+  
+    // Fund vault with leftovers
+    await wallet.fundVaultWithLeftoverERC20(token.getAddress());
+    await wallet.fundVaultWithLeftoverETH();
+  
+    // Check new balances
+    const vaultERC20After = await token.balanceOf(vault.target);
+    const vaultETHAfter = await ethers.provider.getBalance(vault.target);
+  
+    // Should increase by unvested amount
+    const totalWalletTokens = releasableToken + (vaultERC20After - vaultERC20Before);
+    const totalWalletETH = releasableETH + (vaultETHAfter - vaultETHBefore);
+  
+    expect(totalWalletTokens).to.be.closeTo(toUnits(100_000), toUnits(0.01));
+    expect(totalWalletETH).to.be.closeTo(ethers.parseEther("10"), ethers.parseEther("0.01"));
+  });  
 });

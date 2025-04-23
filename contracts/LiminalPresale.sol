@@ -38,7 +38,7 @@ contract LiminalPresale is Ownable {
 
     uint256 public constant BPS_DENOMINATOR = 10000;
     uint256 public constant MIN_CAP_BPS = 7000; // 70%
-    uint256 public constant LIM_TOKEN_RATE = 3000000; // 3000000 LIM per 1 ETH
+    uint256 public constant LIM_TOKEN_RATE = 3500000; // 3000000 LIM per 1 ETH
 
     bool public presaleEnded = false;
     uint256 public processedBuyersCount = 0;

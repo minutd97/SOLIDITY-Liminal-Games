@@ -6,110 +6,147 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
+/// @title Liminal Staking Pool (Shared Emissions, No Fees)
+/// @notice Fixed emissions per day, distributed proportionally to stake.
 contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
     bytes32 public constant POOL_LOADER_ROLE = keccak256("POOL_LOADER_ROLE");
     IERC20 public immutable limToken;
 
-    uint256 public constant APY = 15; // 15% per year
-    uint256 public constant SECONDS_IN_YEAR = 365 days;
+    // Emission parameters
+    uint256 public rewardPerSecond;    // tokens emitted per second
+    uint256 public lastRewardTime;     // last timestamp the pool was updated
+    uint256 public accRewardPerShare;  // accumulated reward-per-share, scaled by 1e12
+
+    // Pool state
+    uint256 public totalStaked;        // total tokens staked
+    uint256 public rewardPool;         // funded rewards available
 
     struct StakeInfo {
-        uint256 amount;
-        uint256 rewardDebt;
-        uint256 lastUpdate;
+        uint256 amount;       // how many tokens the user has staked
+        uint256 rewardDebt;   // user.amount * accRewardPerShare
     }
 
     mapping(address => StakeInfo) public stakes;
-    uint256 public totalStaked;
 
-    uint256 public rewardPool; // Preloaded with 40M LIM at deployment
-
+    event RewardLoaded(uint256 amount);
+    event EmissionRateUpdated(uint256 rewardPerSecond);
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
     event Claimed(address indexed user, uint256 reward);
-    event RewardLoaded(uint256 amount);
 
-    constructor(address _lim) Ownable(msg.sender) {
-        require(_lim != address(0), "Invalid LIM address");
+    /// @param _lim         Address of the LIM token
+    /// @param _dailyReward Tokens emitted per day
+    constructor(address _lim, uint256 _dailyReward) Ownable(msg.sender) {
+        require(_lim != address(0), "Invalid token");
         limToken = IERC20(_lim);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        // Initialize emission rate and timestamp
+        rewardPerSecond = _dailyReward / 1 days;
+        lastRewardTime  = block.timestamp;
     }
 
+    /// @notice Owner can adjust daily emissions
+    function setDailyEmission(uint256 dailyReward) external onlyOwner {
+        _updatePool();
+        rewardPerSecond = dailyReward / 1 days;
+        emit EmissionRateUpdated(rewardPerSecond);
+    }
+
+    /// @notice Loader deposits reward tokens into the pool
     function loadRewardPool(uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
         require(amount > 0, "Zero amount");
-        require(limToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        limToken.transferFrom(msg.sender, address(this), amount);
         rewardPool += amount;
         emit RewardLoaded(amount);
     }
 
+    /// @dev Update pool accounting and distribute rewards
+    function _updatePool() internal {
+        if (block.timestamp <= lastRewardTime) return;
+        uint256 elapsed = block.timestamp - lastRewardTime;
+        if (totalStaked > 0) {
+            uint256 reward = elapsed * rewardPerSecond;
+            if (reward > rewardPool) {
+                reward = rewardPool;
+            }
+            rewardPool -= reward;
+            accRewardPerShare += (reward * 1e12) / totalStaked;
+        }
+        lastRewardTime = block.timestamp;
+    }
+
+    /// @notice View pending rewards for a user
+    function pendingReward(address user) external view returns (uint256) {
+        StakeInfo storage s = stakes[user];
+        uint256 _acc = accRewardPerShare;
+        if (block.timestamp > lastRewardTime && totalStaked > 0) {
+            uint256 elapsed = block.timestamp - lastRewardTime;
+            uint256 reward = elapsed * rewardPerSecond;
+            if (reward > rewardPool) reward = rewardPool;
+            _acc += (reward * 1e12) / totalStaked;
+        }
+        return (s.amount * _acc) / 1e12 - s.rewardDebt;
+    }
+
+    /// @notice Stake tokens to start earning
     function stake(uint256 amount) external nonReentrant {
         require(amount > 0, "Invalid amount");
-        updateReward(msg.sender);
+        _updatePool();
 
-        require(limToken.transferFrom(msg.sender, address(this), amount), "Stake transfer failed");
+        StakeInfo storage s = stakes[msg.sender];
+        if (s.amount > 0) {
+            uint256 pending = (s.amount * accRewardPerShare) / 1e12 - s.rewardDebt;
+            if (pending > 0) {
+                limToken.transfer(msg.sender, pending);
+                emit Claimed(msg.sender, pending);
+            }
+        }
 
-        stakes[msg.sender].amount += amount;
-        stakes[msg.sender].lastUpdate = block.timestamp;
+        limToken.transferFrom(msg.sender, address(this), amount);
+        s.amount += amount;
         totalStaked += amount;
-
+        s.rewardDebt = (s.amount * accRewardPerShare) / 1e12;
         emit Staked(msg.sender, amount);
     }
 
+    /// @notice Unstake tokens and claim rewards
     function unstake(uint256 amount) external nonReentrant {
-        require(amount > 0 && stakes[msg.sender].amount >= amount, "Invalid unstake amount");
-        updateReward(msg.sender);
+        StakeInfo storage s = stakes[msg.sender];
+        require(amount > 0 && s.amount >= amount, "Invalid unstake");
 
-        stakes[msg.sender].amount -= amount;
-        totalStaked -= amount;
+        _updatePool();
+        uint256 pending = (s.amount * accRewardPerShare) / 1e12 - s.rewardDebt;
+        if (pending > 0) {
+            limToken.transfer(msg.sender, pending);
+            emit Claimed(msg.sender, pending);
+        }
 
-        require(limToken.transfer(msg.sender, amount), "Unstake transfer failed");
+        s.amount       -= amount;
+        totalStaked    -= amount;
+        s.rewardDebt    = (s.amount * accRewardPerShare) / 1e12;
+
+        limToken.transfer(msg.sender, amount);
         emit Unstaked(msg.sender, amount);
     }
 
+    /// @notice Claim only rewards without unstaking
     function claim() external nonReentrant {
-        updateReward(msg.sender);
-        uint256 reward = stakes[msg.sender].rewardDebt;
-        require(reward > 0, "No reward");
-        require(reward <= rewardPool, "Insufficient reward pool");
+        _updatePool();
+        StakeInfo storage s = stakes[msg.sender];
+        uint256 pending = (s.amount * accRewardPerShare) / 1e12 - s.rewardDebt;
+        require(pending > 0, "No reward");
 
-        stakes[msg.sender].rewardDebt = 0;
-        rewardPool -= reward;
-
-        require(limToken.transfer(msg.sender, reward), "Reward transfer failed");
-        emit Claimed(msg.sender, reward);
+        s.rewardDebt = (s.amount * accRewardPerShare) / 1e12;
+        limToken.transfer(msg.sender, pending);
+        emit Claimed(msg.sender, pending);
     }
 
-    function updateReward(address user) internal {
-        StakeInfo storage stakeData = stakes[user];
-        if (stakeData.amount == 0) return;
-
-        uint256 timeElapsed = block.timestamp - stakeData.lastUpdate;
-        uint256 pending = (stakeData.amount * APY * timeElapsed) / (100 * SECONDS_IN_YEAR);
-        stakeData.rewardDebt += pending;
-        stakeData.lastUpdate = block.timestamp;
-    }
-
-    function getPendingRewards(address user) external view returns (uint256) {
-        StakeInfo memory stakeData = stakes[user];
-
-        uint256 pending = 0;
-        if (stakeData.amount > 0) {
-            uint256 timeElapsed = block.timestamp - stakeData.lastUpdate;
-            pending = (stakeData.amount * APY * timeElapsed) / (100 * SECONDS_IN_YEAR);
-        }
-
-        return stakeData.rewardDebt + pending;
-    }
-
-    function grantLoaderRole(address account) public onlyOwner {
+    /// @notice Manage loader role
+    function grantLoaderRole(address account) external onlyOwner {
         grantRole(POOL_LOADER_ROLE, account);
     }
-
-    function revokeLoaderRole(address account) public onlyOwner {
+    function revokeLoaderRole(address account) external onlyOwner {
         revokeRole(POOL_LOADER_ROLE, account);
     }
-
-    // function drainRewardPool() external onlyOwner {
-    //     rewardPool = 0;
-    // }
 }

@@ -31,7 +31,7 @@ contract TeamVestingVault is Ownable {
     }
 
     /// @notice Sets the release rate for an ERC20 token, cannot overwrite once set
-    function setTokenReleaseRate(address token, uint256 ratePerSecond) external onlyOwner {
+    function setERC20ReleaseRate(address token, uint256 ratePerSecond) external onlyOwner {
         require(token != address(0), "Invalid token");
         require(ratePerSecond > 0, "Rate must be positive");
 

@@ -9,7 +9,6 @@ import "./TeamVestingWallet.sol";
 
 contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
     bytes32 public constant WALLET_FUNDER_ROLE = keccak256("WALLET_FUNDER_ROLE");
-    address public immutable vault;
     
     struct VestingInfo {
         address wallet;

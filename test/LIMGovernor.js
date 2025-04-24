@@ -44,10 +44,17 @@ describe("LIMGovernor", function () {
 
     // Wait for voting period to end
     const votingPeriod = await limGovernor.votingPeriod();
-    await time.advanceBlocks(votingPeriod);
+    for (let i = 0; i < votingPeriod; i++) {
+        await ethers.provider.send("evm_mine");
+    }
 
     // Check if proposal succeeded
     const state = await limGovernor.state(proposalId);
     expect(state).to.equal(4); // 4 = Succeeded
+
+    // Queue and Execute (if using timelock) — or just execute directly
+    await limGovernor.execute(targets, values, calldatas, ethers.keccak256(ethers.toUtf8Bytes(proposalDescription)));
+
+    // Verify the on-chain effect (if any)
   });
 });

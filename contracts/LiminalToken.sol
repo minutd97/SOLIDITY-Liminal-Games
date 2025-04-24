@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract LiminalToken is ERC20, Ownable, Pausable {
-
-    constructor() ERC20("Liminal Token", "$LIM") Ownable(msg.sender) {
-        _mint(msg.sender, 1_000_000_000 * 10 ** decimals()); // Full supply minted
+contract LiminalToken is ERC20Votes, Pausable, Ownable {
+    
+    constructor() ERC20("Liminal Token", "$LIM") EIP712("Liminal Token", "1") Ownable(msg.sender) {
+        _mint(msg.sender, 1_000_000_000 * 10 ** decimals());
     }
 
     function pause() public onlyOwner {
@@ -19,12 +20,12 @@ contract LiminalToken is ERC20, Ownable, Pausable {
         _unpause();
     }
 
-    function transfer(address _to, uint256 _value) public override whenNotPaused returns (bool) {
-        return super.transfer(_to, _value);
+    function transfer(address to, uint256 amount) public override whenNotPaused returns (bool) {
+        return super.transfer(to, amount);
     }
 
-    function transferFrom(address _from, address _to, uint256 _value) public override whenNotPaused returns (bool) {
-        return super.transferFrom(_from, _to, _value);
+    function transferFrom(address from, address to, uint256 amount) public override whenNotPaused returns (bool) {
+        return super.transferFrom(from, to, amount);
     }
 
     function burn(uint256 amount) public {
@@ -34,5 +35,9 @@ contract LiminalToken is ERC20, Ownable, Pausable {
     function burnFrom(address from, uint256 amount) public {
         _spendAllowance(from, msg.sender, amount);
         _burn(from, amount);
+    }
+
+    function _update(address from, address to, uint256 value) internal override(ERC20Votes) {
+        super._update(from, to, value);
     }
 }

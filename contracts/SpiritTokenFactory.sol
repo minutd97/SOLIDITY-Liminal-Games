@@ -8,7 +8,7 @@ import {SpiritToken} from "./SpiritToken.sol";
 contract SpiritTokenFactory is Ownable {
     SpiritToken public immutable spirit;
     uint256 public pegRate; // in wei per SPIRIT (e.g. 0.00004 ETH = 40000000000000 wei)
-    uint256 public burnFee; // in basis points (e.g. 100 = 1%)
+    uint256 public redeemFee; // in basis points (e.g. 100 = 1%)
 
     uint256 public publicProtocolReserve;
     uint256 public collectedProtocolFees;
@@ -17,17 +17,17 @@ contract SpiritTokenFactory is Ownable {
     uint256 public totalSpiritBurned;
 
     event PegRateUpdated(uint256 newRate);
-    event BurnFeeUpdated(uint256 newFee);
+    event RedeemFeeUpdated(uint256 newFee);
     event Minted(address indexed user, uint256 ethIn, uint256 spiritOut);
     event Redeemed(address indexed user, uint256 spiritIn, uint256 ethOut);
     event PublicReserveDeposit(address indexed sender, uint256 amount);
     event ProtocolFeesCollected(address indexed collector, uint256 amount);
 
-    constructor(address _spiritToken, uint256 _pegRate, uint256 _burnFee) Ownable(msg.sender) {
+    constructor(address _spiritToken, uint256 _pegRate, uint256 _redeemFee) Ownable(msg.sender) {
         require(_spiritToken != address(0), "Invalid token address");
         spirit = SpiritToken(_spiritToken);
         pegRate = _pegRate;
-        burnFee = _burnFee;
+        redeemFee = _redeemFee;
     }
 
     function setPegRate(uint256 newRate) external onlyOwner {
@@ -36,10 +36,10 @@ contract SpiritTokenFactory is Ownable {
         emit PegRateUpdated(newRate);
     }
 
-    function setBurnFee(uint256 newFee) external onlyOwner {
+    function setRedeemFee(uint256 newFee) external onlyOwner {
         require(newFee <= 1000, "Max 10%");
-        burnFee = newFee;
-        emit BurnFeeUpdated(newFee);
+        redeemFee = newFee;
+        emit RedeemFeeUpdated(newFee);
     }
 
     // Public: ETH → SPIRIT
@@ -57,7 +57,7 @@ contract SpiritTokenFactory is Ownable {
     function redeemSpirit(uint256 amount) external {
         require(amount > 0, "Nothing to redeem");
         uint256 ethAmount = amount * pegRate / 1e18;
-        uint256 fee = (ethAmount * burnFee) / 10000;
+        uint256 fee = (ethAmount * redeemFee) / 10000;
         uint256 payout = ethAmount - fee;
 
         require(address(this).balance >= payout, "Insufficient ETH in treasury");

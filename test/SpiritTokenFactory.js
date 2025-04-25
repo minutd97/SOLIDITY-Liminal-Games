@@ -28,7 +28,7 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
     const {owner, user1, spirit, factory } = await loadFixture(deployFixture);
 
     await factory.connect(owner).setPegRate(ethers.parseUnits("0.00004", "ether"));
-    await factory.connect(owner).setBurnFee(100);
+    await factory.connect(owner).setRedeemFee(100);
 
     const ethSent = ethers.parseEther("0.004"); // Expect 100 SPIRIT
     await factory.connect(user1).mintSpirit({ value: ethSent });
@@ -49,10 +49,10 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
 
     const spiritAmount = ethers.parseUnits("100", 18);
     const pegRate = await factory.pegRate(); // 0.00004 ETH/SPIRIT
-    const burnFee = await factory.burnFee(); // 1%
+    const redeemFee = await factory.redeemFee(); // 1%
 
     const expectedEth = (spiritAmount * pegRate) / 10n ** 18n;
-    const expectedFee = (expectedEth * burnFee) / 10000n;
+    const expectedFee = (expectedEth * redeemFee) / 10000n;
     const expectedPayout = expectedEth - expectedFee;
 
     // Approve + redeem

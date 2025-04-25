@@ -9,6 +9,9 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 contract SpiritToken is ERC20, Ownable, Pausable, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
 
+    bool public adminRenounced = false;
+    event AdminRoleRenounced(address indexed previousAdmin);
+
     constructor() ERC20("Spirit Token", "$SPIRIT") Ownable(msg.sender) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
@@ -46,7 +49,10 @@ contract SpiritToken is ERC20, Ownable, Pausable, AccessControl {
         grantRole(MINTER_ROLE, account);
     }
 
-    function revokeMinterRole(address account) public onlyOwner {
-        revokeRole(MINTER_ROLE, account);
+    function renounceAdmin() external onlyOwner {
+        require(!adminRenounced, "Admin role already renounced");
+        adminRenounced = true;
+        _revokeRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        emit AdminRoleRenounced(msg.sender);
     }
 }

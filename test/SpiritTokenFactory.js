@@ -40,7 +40,7 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
     expect(contractEth).to.equal(ethSent);
   });
 
-  it("should redeem SPIRIT to ETH minus burn fee", async function () {
+  it("should redeem SPIRIT to ETH minus redeem fee", async function () {
     const { user1, spirit, factory } = await loadFixture(deployFixture);
 
     // Mint first

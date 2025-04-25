@@ -151,7 +151,7 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     await presale.startPresale(3600); // 1-hour presale
 
     const ethValue = ethers.parseEther("0.5");
-    const userCount = 19;
+    const userCount = 38;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
@@ -212,7 +212,7 @@ async function swap(_zeroForOne, _amountIn, _user) {
         //console.log("✅ SWAP HELPER: Approved LIM tokens swap helper!");
     }
 
-    const minAmountOut = ethers.parseUnits("0.0001", 18);     // Minimum expected output
+    const minAmountOut = ethers.parseUnits("0.00001", 18);     // Minimum expected output
     const valueOfEth = _zeroForOne ? _amountIn : ethers.parseUnits("0", 18);
     await swapHelper.connect(_user).swapExactInputSingle(poolKey, _zeroForOne, _amountIn, minAmountOut, { value: valueOfEth });
     console.log(`✅ Successfully swapped! ${_zeroForOne ? "ETH -> LIM" : "LIM -> ETH"}, amountIn: ${ethers.formatUnits(_amountIn, 18)}`);
@@ -240,9 +240,6 @@ async function testGetterFunctions(contract){
 
     const buyersCount = await contract.getBuyersCount();
     console.log(`buyersCount : ${buyersCount}`)
-
-    const getRemainingCap = await contract.getRemainingCap();
-    console.log(`getRemainingCap : ${getRemainingCap}`)
 }
 
 async function log_EthBalance(address, name) {

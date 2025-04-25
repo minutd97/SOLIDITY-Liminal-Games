@@ -27,22 +27,14 @@ contract LiminalPresale is Ownable {
     LiminalToken public immutable limToken;
     address public immutable v4PoolHelper;
     
-    uint256 public constant presaleCap = 10 ether;
+    uint256 public constant MIN_ETH_REQUIERED = 7 ether;
+    uint256 public constant WALLET_MAX_CONTRIBUTION = 0.5 ether;
+    uint256 public constant WALLET_MIN_CONTRIBUTION = 0.02 ether;
+
     uint256 public startTime;
     uint256 public endTime;
     uint256 public modificationCount = 0;
     uint256 public maxModifications = 2;
-
-    uint256 public constant WALLET_MAX_CONTRIBUTION = 0.5 ether;
-    uint256 public constant WALLET_MIN_CONTRIBUTION = 0.02 ether;
-
-    uint256 public constant BPS_DENOMINATOR = 10000;
-    uint256 public constant MIN_CAP_BPS = 7000; // 70%
-    uint256 public constant LIM_TOKEN_RATE = 3500000; // eg. 3500000 LIM per 1 ETH
-
-    bool public presaleEnded = false;
-    uint256 public processedBuyersCount = 0;
-    bool public tokensDistributed = false;
 
     uint256 public totalPoolTokens;
     uint256 public totalPresaleTokens;
@@ -51,12 +43,16 @@ contract LiminalPresale is Ownable {
     mapping(address => uint256) public presaleContributions;
     address[] public buyers;
 
+    bool public presaleEnded = false;
+    uint256 public processedBuyersCount = 0;
+    bool public tokensDistributed = false;
+
     event PresaleStarted(uint256 startTime, uint256 endTime);
     event ContributionReceived(address indexed buyer, uint256 amount);
     event PresaleFinalized(bool success, uint256 totalContributed);
     event EndTimeExtended(uint256 newEndTime);
+    event PoolTokensDeposited(uint256 amount);
     event PresaleTokensDeposited(uint256 amount);
-    event RewardTokensDeposited(uint256 amount);
 
     modifier onlyWhileActive() {
         require(startTime > 0 && block.timestamp >= startTime, "Presale not started");
@@ -82,7 +78,6 @@ contract LiminalPresale is Ownable {
 
     function contribute() external payable onlyWhileActive {
         require(msg.value >= WALLET_MIN_CONTRIBUTION, "Contribution is below minimum");
-        require(totalContributions + msg.value <= presaleCap, "Contribution exceeds cap");
         require(presaleContributions[msg.sender] + msg.value <= WALLET_MAX_CONTRIBUTION, "Contribution exceeds wallet limit");
 
         if (presaleContributions[msg.sender] == 0) {
@@ -112,19 +107,14 @@ contract LiminalPresale is Ownable {
         for (uint256 i = 0; i < count; i++) {
             address buyer = buyers[processedBuyersCount];     
             uint256 contribution = presaleContributions[buyer];
-            uint256 tokensToTransfer = (contribution * LIM_TOKEN_RATE * 1e18) / 1 ether;
-            require(tokensToTransfer <= totalPresaleTokens, "Insufficient reward tokens");
+            uint256 tokensToTransfer = (contribution * totalPresaleTokens) / totalContributions;
 
             limToken.transfer(buyer, tokensToTransfer);
-            totalPresaleTokens -= tokensToTransfer;
             processedBuyersCount++;
         }
 
         if (processedBuyersCount >= buyers.length) {
             tokensDistributed = true;
-
-            //Burn the rest of the tokens if any
-            limToken.burn(totalPresaleTokens);
             totalPresaleTokens = 0;
         }
     }
@@ -150,14 +140,13 @@ contract LiminalPresale is Ownable {
         require(tokensDistributed, "Tokens are not distributed");
         IV4PoolHelper(v4PoolHelper).setupPermit2Approvals(address(0), address(limToken));
 
-        uint256 limTokenAmount = totalContributions * LIM_TOKEN_RATE;
-        limToken.transfer(v4PoolHelper, limTokenAmount);
+        limToken.transfer(v4PoolHelper, totalPoolTokens);
 
         PoolInput memory input = PoolInput({
             token0: address(0),
             token1: address(limToken),
             amount0: totalContributions,
-            amount1: limTokenAmount,
+            amount1: totalPoolTokens,
             fee: 300,
             tickSpacing: 60,
             tickLower: 148560,
@@ -165,25 +154,7 @@ contract LiminalPresale is Ownable {
         });
         IV4PoolHelper(v4PoolHelper).createPoolAndAddLiquidity{value: totalContributions}(input);
         totalContributions = 0;
-        
-        //Burn the rest of the tokens if any
-        totalPoolTokens -= limTokenAmount;
-        limToken.burn(totalPoolTokens);
         totalPoolTokens = 0;
-    }
-
-    function depositPoolTokens(uint256 amount) external onlyOwner {
-        require(amount > 0, "Amount must be greater than 0");
-        limToken.transferFrom(msg.sender, address(this), amount);
-        totalPoolTokens += amount;
-        emit PresaleTokensDeposited(amount);
-    }
-
-    function depositPresaleTokens(uint256 amount) external onlyOwner {
-        require(amount > 0, "Amount must be greater than 0");
-        limToken.transferFrom(msg.sender, address(this), amount);
-        totalPresaleTokens += amount;
-        emit RewardTokensDeposited(amount);
     }
 
     function extendEndTime(uint256 _extraSeconds) external onlyOwner {
@@ -196,6 +167,24 @@ contract LiminalPresale is Ownable {
         emit EndTimeExtended(endTime);
     }
 
+    function depositPoolTokens(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than 0");
+        limToken.transferFrom(msg.sender, address(this), amount);
+        totalPoolTokens += amount;
+        emit PoolTokensDeposited(amount);
+    }
+
+    function depositPresaleTokens(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than 0");
+        limToken.transferFrom(msg.sender, address(this), amount);
+        totalPresaleTokens += amount;
+        emit PresaleTokensDeposited(amount);
+    }
+
+    function minCapReached() public view returns (bool) {
+        return totalContributions >= MIN_ETH_REQUIERED;
+    }
+
     function getAllowedContribution(address buyer) external view returns (uint256) {
         return WALLET_MAX_CONTRIBUTION - presaleContributions[buyer];
     }
@@ -204,15 +193,7 @@ contract LiminalPresale is Ownable {
         return block.timestamp >= endTime ? 0 : endTime - block.timestamp;
     }
 
-    function getRemainingCap() external view returns (uint256) {
-        return totalContributions >= presaleCap ? 0 : presaleCap - totalContributions;
-    }
-
     function getBuyersCount() external view returns (uint256) {
         return buyers.length;
-    }
-
-    function minCapReached() public view returns (bool) {
-        return totalContributions >= (presaleCap * MIN_CAP_BPS) / BPS_DENOMINATOR;
     }
 }

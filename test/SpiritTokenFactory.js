@@ -20,6 +20,8 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
 
     // Grant minter role to factory
     await spirit.connect(owner).grantMinterRole(await factory.getAddress());
+    // We lose all the roles for fainess and to make sure tokens will be minted only from factory
+    await spirit.connect(owner).renounceAdmin();
 
     return { owner, user1, user2, spirit, factory };
   }

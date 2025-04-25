@@ -39,11 +39,11 @@ describe("LiminalPresale", function () {
     // Let the presale contract be the pool creator
     await poolHelper.grantCreatorRole(presale.target);
 
-    const tokensForPool = ethers.parseUnits("30000000", 18); // 30 mil LIM
+    const tokensForPool = ethers.parseUnits("35000000", 18); // 35 mil LIM
     await limToken.connect(owner).approve(presale.target, tokensForPool)
     await presale.connect(owner).depositPoolTokens(tokensForPool);
 
-    const tokensForPresale = ethers.parseUnits("30000000", 18); // 30 mil LIM
+    const tokensForPresale = ethers.parseUnits("35000000", 18); // 35 mil LIM
     await limToken.connect(owner).approve(presale.target, tokensForPresale)
     await presale.connect(owner).depositPresaleTokens(tokensForPresale);
 

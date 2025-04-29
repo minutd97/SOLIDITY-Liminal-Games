@@ -141,8 +141,6 @@ contract LiminalPresale is Ownable {
         IV4PoolHelper(v4PoolHelper).setupPermit2Approvals(address(0), address(limToken));
         limToken.transfer(v4PoolHelper, totalPoolTokens);
 
-        // (int24 tickSpacing, int24 tickLower, int24 tickUpper) = calculateTicks();
-
         // Ticks will be determined in the V4PoolHelper contract
         PoolInput memory input = PoolInput({
             token0: address(0),
@@ -159,46 +157,6 @@ contract LiminalPresale is Ownable {
         totalContributions = 0;
         totalPoolTokens = 0;
     }
-
-    // function calculateTicks() internal view returns (int24 tickSpacing, int24 tickLower, int24 tickUpper) {   
-    //     tickSpacing = 60;
-    //     int24 baseCenterTick;
-
-    //     if (totalContributions == 0 || totalPoolTokens == 0) {
-    //         baseCenterTick = 150000; // fallback default
-    //     } else {
-    //         // Simple rough estimation: scale center tick around 150000
-    //         // You can tune this based on your expected ETH/LIM ratio
-    //         uint256 priceInWei = (totalContributions * 1e18) / totalPoolTokens; // price = ETH per LIM
-
-    //         if (priceInWei >= 1e15) {
-    //             // Very expensive LIM, higher center tick
-    //             baseCenterTick = 155000;
-    //         } else if (priceInWei >= 1e13) {
-    //             // Medium priced LIM
-    //             baseCenterTick = 150000;
-    //         } else {
-    //             // Cheap LIM, lower center tick
-    //             baseCenterTick = 145000;
-    //         }
-    //     }
-
-    //     // Align center tick
-    //     int24 centerTick = (baseCenterTick / tickSpacing) * tickSpacing;
-
-    //     // How wide the range should be
-    //     int24 rangeSize = 40080; // wide range
-    //     int24 halfRange = rangeSize / 2;
-
-    //     tickLower = centerTick - halfRange;
-    //     tickUpper = centerTick + halfRange;
-
-    //     // Align tickLower and tickUpper safely
-    //     tickLower = (tickLower / tickSpacing) * tickSpacing;
-    //     tickUpper = (tickUpper / tickSpacing) * tickSpacing;
-
-    //     require(tickLower < tickUpper, "Invalid ticks calculated");
-    // }
 
     function extendEndTime(uint256 _extraSeconds) external onlyOwner {
         require(endTime > 0 && block.timestamp <= endTime, "Cannot extend");

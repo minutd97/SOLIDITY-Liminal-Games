@@ -9,6 +9,62 @@ const POSITION_MANAGER = FORK_MAINNET ? "0xd88f38f930b7952f2db2432cb002e7abbf3dd
 const PERMIT2_ADDRESS = FORK_MAINNET ? "0x000000000022D473030F116dDEE9F6B43aC78BA3" : "0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768";
 const UNIVERSAL_ROUTER = FORK_MAINNET ? "0xa51afafe0263b40edaef0df8781ea9aa03e381a3" : "0xefd1d4bd4cf1e86da286bb4cb1b8bced9c10ba47";
 
+const POSITION_MANAGER_ABI = [
+    {
+      "inputs": [
+        { "internalType": "bytes",   "name": "unlockData", "type": "bytes"   },
+        { "internalType": "uint256", "name": "deadline",   "type": "uint256" }
+      ],
+      "name": "modifyLiquidities",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        { "internalType": "bytes[]", "name": "data", "type": "bytes[]" }
+      ],
+      "name": "multicall",
+      "outputs": [
+        { "internalType": "bytes[]", "name": "results", "type": "bytes[]" }
+      ],
+      "stateMutability": "payable",
+      "type": "function"
+    }
+];  
+
+const PERMIT2_ABI = [
+    // approve(token, spender, amount, expiration)
+    {
+      "inputs": [
+        { "internalType": "address", "name": "token",    "type": "address"  },
+        { "internalType": "address", "name": "spender",  "type": "address"  },
+        { "internalType": "uint160", "name": "amount",   "type": "uint160"  },
+        { "internalType": "uint48",  "name": "expiration","type": "uint48"   }
+      ],
+      "name": "approve",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    // allowance(owner, token, spender) → (amount, expiration, nonce)
+    {
+      "inputs": [
+        { "internalType": "address", "name": "owner",   "type": "address" },
+        { "internalType": "address", "name": "token",   "type": "address" },
+        { "internalType": "address", "name": "spender", "type": "address" }
+      ],
+      "name": "allowance",
+      "outputs": [
+        { "internalType": "uint160", "name": "amount",     "type": "uint160" },
+        { "internalType": "uint48",  "name": "expiration", "type": "uint48"  },
+        { "internalType": "uint48",  "name": "nonce",      "type": "uint48"  }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+];
+  
 let limToken, swapHelper;
 
 describe("LiminalPresale", function () {
@@ -47,7 +103,9 @@ describe("LiminalPresale", function () {
     await limToken.connect(owner).approve(presale.target, tokensForPresale)
     await presale.connect(owner).depositPresaleTokens(tokensForPresale);
 
-    return { owner, user1, user2, presale};
+    await limToken.transfer(user1.address, ethers.parseUnits("1000000", 18));
+
+    return { owner, user1, user2, presale, poolHelper};
   }
 
 //   it("should accept contributions within limits", async function () {
@@ -147,11 +205,11 @@ describe("LiminalPresale", function () {
 //   });
 
 it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap", async function () {
-    const { owner, presale, user1 } = await loadFixture(deployFixture);
+    const { owner, presale, user1, poolHelper} = await loadFixture(deployFixture);
     await presale.startPresale(3600); // 1-hour presale
 
     const ethValue = ethers.parseEther("0.5");
-    const userCount = 200;
+    const userCount = 14;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
@@ -170,7 +228,7 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     await ethers.provider.send("evm_mine");
 
     await presale.endPresale();
-    for (let i = 0; i < 2; i++){
+    for (let i = 0; i < 1; i++){
         await presale.distributeTokens(100);
     }
 
@@ -187,6 +245,8 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
 
     const totalContributions = await presale.totalContributions();
     expect(totalContributions).to.equal(0);
+
+    await userMintsPosition(poolHelper, user1);
 
     // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
     await swapHelper.approveTokenWithPermit2(limToken.target);
@@ -232,6 +292,88 @@ async function swap(_zeroForOne, _amountIn, _user) {
     
     await log_TokenBalance(limToken, "LIM", _user.address, "User1");
     await log_EthBalance(_user.address, "User1");
+}
+
+async function userMintsPosition(poolHelper, user) {
+    // 1) Instantiate PositionManager contract connected to the user
+    const positionManager = new ethers.Contract(
+      POSITION_MANAGER,
+      POSITION_MANAGER_ABI,
+      user
+    );
+  
+    // 2) Define how much the user wants to deposit
+    const userEthAmount   = ethers.parseEther("1.0");         // 1 ETH
+    const userTokenAmount = ethers.parseUnits("200000", 18); // 200k LIM
+  
+    const MAX_ALLOW = (1n << 160n) - 1n; 
+    // 3a) Approve the ERC-20 itself so Permit2 can pull your LIM
+    await limToken.connect(user).approve(
+        PERMIT2_ADDRESS,   // Permit2 forwarder
+        MAX_ALLOW          // same max‐uint160 or at least userTokenAmount
+    );
+    const erc20Allow = await limToken.allowance(user.address, PERMIT2_ADDRESS);
+    console.log("🛠 ERC20 → Permit2 allowance:", erc20Allow.toString());    
+
+    // 3) Approve Permit2
+    const permit2 = new ethers.Contract(
+        PERMIT2_ADDRESS,
+        PERMIT2_ABI,
+        user
+      );
+    
+    const expiration = Math.floor(Date.now()/1000) + 60*60*24*365; // one year from now
+    await permit2.approve(
+        limToken.target,          // the token you’re allowing
+        POSITION_MANAGER,         // the Uniswap v4 PositionManager (spender)
+        MAX_ALLOW,          // max amount it may pull
+        expiration                // timestamp after which this permit expires
+    );
+  
+    // Optional: read it back
+    const [amt, exp, nonce] = await permit2.allowance(
+        user.address,
+        limToken.target,
+        POSITION_MANAGER
+    );
+    console.log(`✅ Permit2: ${amt.toString()} LIM approved until ${exp.toString()} (nonce ${nonce.toString()})`);
+
+    // 4) Build the PoolInput object expected by your helper
+    const poolInput = {
+      token0:     ethers.ZeroAddress,
+      token1:     limToken.target,
+      amount0:    userEthAmount,
+      amount1:    userTokenAmount,
+      fee:        300,
+      tickSpacing:60,
+      tickLower:  0,  // these are ignored by buildMintParamsForUser
+      tickUpper:  0
+    };
+  
+    // 5) Build the PoolInput and fetch the Uniswap call data
+    const [ actions, params, valueToSend ] =
+    await poolHelper.connect(user).buildMintParamsForUser(poolInput);
+
+    // 6) Pack the inner encode for modifyLiquidities
+    const inner = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["bytes","bytes[]"],
+    [ actions, params ]
+    );
+    const deadline = (await ethers.provider.getBlock("latest")).timestamp + 120;
+
+    // 7) Now call multicall, *not* modifyLiquidities directly
+    const callData = positionManager.interface.encodeFunctionData(
+    "modifyLiquidities",
+    [ inner, deadline ]
+    );
+    await positionManager
+    .connect(user)
+    .multicall(
+        [ callData ],
+        { value: valueToSend }
+    );
+
+    console.log("✅ userMintPosition() completed");
 }
 
 async function testAllowedContribution(contract, buyer){

@@ -43,7 +43,19 @@ contract V4PoolHelper is Ownable, AccessControl {
         int24 tickUpper;
     }
 
-    function createPoolAndAddLiquidity(PoolInput calldata input) external payable onlyRole(POOL_CREATOR) {
+    function createPoolAndAddLiquidity(PoolInput calldata _input) external payable onlyRole(POOL_CREATOR) {
+        (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) = calculateTicks(_input);
+        PoolInput memory input = PoolInput({
+            token0: _input.token0,
+            token1: _input.token1,
+            amount0: _input.amount0,
+            amount1: _input.amount1,
+            fee: _input.fee,
+            tickSpacing: _input.tickSpacing,
+            tickLower: tickLower,
+            tickUpper: tickUpper
+        });
+        
         bool isCorrectOrder = input.token0 < input.token1;
         (address sorted0, address sorted1) = isCorrectOrder
             ? (input.token0, input.token1)
@@ -60,8 +72,7 @@ contract V4PoolHelper is Ownable, AccessControl {
             hooks: IHooks(address(0))
         });
 
-        uint160 sqrtPriceX96 = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);
-
+        //uint160 sqrtPriceX96 = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             TickMath.getSqrtPriceAtTick(input.tickLower),
@@ -75,6 +86,26 @@ contract V4PoolHelper is Ownable, AccessControl {
         bytes[] memory params = buildPositionParams(pool, actions, mintParams, sqrtPriceX96);
 
         positionManager.multicall{value: msg.value}(params);
+    }
+
+    function calculateTicks(PoolInput memory input) internal pure returns (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) {
+        int24 tickSpacing = input.tickSpacing;
+
+        sqrtPriceX96 = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);
+
+        int24 centerTick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);
+        centerTick = (centerTick / tickSpacing) * tickSpacing;
+
+        int24 rangeSize = 40080;
+        int24 halfRange = rangeSize / 2;
+
+        tickLower = centerTick - halfRange;
+        tickUpper = centerTick + halfRange;
+
+        tickLower = (tickLower / tickSpacing) * tickSpacing;
+        tickUpper = (tickUpper / tickSpacing) * tickSpacing;
+
+        require(tickLower < tickUpper, "Invalid ticks calculated");
     }
 
     function buildPositionParams(PoolKey memory pool, bytes memory actions, bytes[] memory mintParams, uint160 sqrtPriceX96) internal view returns (bytes[] memory) {

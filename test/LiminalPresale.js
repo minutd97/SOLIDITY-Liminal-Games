@@ -151,7 +151,7 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     await presale.startPresale(3600); // 1-hour presale
 
     const ethValue = ethers.parseEther("0.5");
-    const userCount = 38;
+    const userCount = 200;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
@@ -170,7 +170,7 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     await ethers.provider.send("evm_mine");
 
     await presale.endPresale();
-    for (let i = 0; i < 1; i++){
+    for (let i = 0; i < 2; i++){
         await presale.distributeTokens(100);
     }
 
@@ -191,9 +191,22 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
     await swapHelper.approveTokenWithPermit2(limToken.target);
 
-    await swap(true, ethers.parseUnits("0.1", 18), user1); //swap 0.1 ETH
-    await swap(false, ethers.parseUnits("20000", 18), user1); //swap 20000 LIM
-    await swap(false, ethers.parseUnits("20000", 18), user1); //swap 20000 LIM
+    console.log("──────────── Swap Tests ─────────────");
+
+    // Small swap
+    await swap(true, ethers.parseEther("0.1"), user1); // Swap 0.1 ETH -> LIM
+
+    // Medium swap
+    await swap(true, ethers.parseEther("1.0"), user1); // Swap 1 ETH -> LIM
+
+    // Larger swap
+    await swap(true, ethers.parseEther("5.0"), user1); // Swap 5 ETH -> LIM
+
+    // Now swap some LIM back to ETH
+    await swap(false, ethers.parseUnits("100000", 18), user1); // Swap 100k LIM -> ETH
+    await swap(false, ethers.parseUnits("500000", 18), user1); // Swap 500k LIM -> ETH
+
+    console.log("──────────── End of Swap Tests ─────────────");
   });
 });
 

@@ -21,26 +21,44 @@ const POSITION_MANAGER_ABI = [
     type: "function"
   },
   {
-    inputs: [{ internalType: "bytes[]", name: "data", type: "bytes[]" }],
+    inputs: [
+      { internalType: "bytes[]", name: "data", type: "bytes[]" }
+    ],
     name: "multicall",
-    outputs: [{ internalType: "bytes[]", name: "results", type: "bytes[]" }],
+    outputs: [
+      { internalType: "bytes[]", name: "results", type: "bytes[]" }
+    ],
     stateMutability: "payable",
     type: "function"
   },
   {
-    inputs: [{ internalType: "address", name: "owner", type: "address" }],
+    inputs: [
+      { internalType: "address", name: "owner", type: "address" }
+    ],
     name: "balanceOf",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    outputs: [
+      { internalType: "uint256", name: "", type: "uint256" }
+    ],
     stateMutability: "view",
     type: "function"
   },
-  // ERC-721 Transfer event (must include for filters.Transfer to work)
+  {
+    inputs: [
+      { internalType: "uint256", name: "tokenId", type: "uint256" }
+    ],
+    name: "getPositionLiquidity",
+    outputs: [
+      { internalType: "uint128", name: "", type: "uint128" }
+    ],
+    stateMutability: "view",
+    type: "function"
+  },
   {
     anonymous: false,
     inputs: [
-      { indexed: true,  internalType: "address", name: "from",    type: "address" },
-      { indexed: true,  internalType: "address", name: "to",      type: "address" },
-      { indexed: true,  internalType: "uint256", name: "tokenId", type: "uint256" }
+      { indexed: true, internalType: "address", name: "from",    type: "address" },
+      { indexed: true, internalType: "address", name: "to",      type: "address" },
+      { indexed: true, internalType: "uint256", name: "tokenId", type: "uint256" }
     ],
     name: "Transfer",
     type: "event"
@@ -169,6 +187,7 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     //await testExactAmounts(poolHelper);
     await userMintsPosition(poolHelper, user1);
     await userIncreasesLiquidity(poolHelper, user1);
+    await userDecreasesLiquidity(poolHelper, user1);
 
     // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
     await swapHelper.approveTokenWithPermit2(limToken.target);
@@ -348,6 +367,67 @@ async function userIncreasesLiquidity(poolHelper, user) {
     const receipt = await tx.wait();
     const gasUsed = receipt.gasUsed;
     console.log(`✅ userIncreasesLiquidity() completed, Gas Used in units: ${gasUsed}`);
+}
+
+async function userDecreasesLiquidity(poolHelper, user) {
+  console.log("💧 user address in userDecreasesLiquidity:", user.address);
+
+  const positionManager = new ethers.Contract(
+      POSITION_MANAGER,
+      POSITION_MANAGER_ABI,
+      user
+  );
+
+  // 1) Fetch the user’s tokenId & current liquidity via positionInfo
+  const tokenId = await poolHelper.userTokenIds(user.address);
+  let currentLiq = await positionManager.getPositionLiquidity(tokenId);
+  currentLiq = currentLiq / 2n; // Take only half of the liquidity
+  console.log("Current liquidity:", currentLiq.toString());
+
+  // 2) Preview expected token returns for that full liquidity
+  const [expected0, expected1] = await poolHelper.connect(user).previewAmountsForLiquidity(currentLiq);
+  console.log(`Expected returns: token0=${expected0}, token1=${expected1}`);
+
+  // Use bps = 10n; 0.1% slippage
+  const bps = 10n; // slippage
+  const min0 = (expected0 * (10_000n - bps)) / 10_000n;
+  const min1 = (expected1 * (10_000n - bps)) / 10_000n;
+
+  // 3) Build calldata via the helper using those as minimums
+  const [actions, params] = await poolHelper.connect(user)
+      .buildDecreaseLiquidityParamsForUser(
+          ethers.ZeroAddress,    // token0 (ETH)
+          limToken.target,       // token1 (LIM)
+          currentLiq,            // liquidity delta
+          min0,             // min amount0
+          min1              // min amount1
+      );
+
+  const inner = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["bytes", "bytes[]"],
+      [actions, params]
+  );
+  const block = await ethers.provider.getBlock("latest");
+  const deadline = block.timestamp + 120;
+
+  // 4) Execute via multicall
+  const callData = positionManager.interface.encodeFunctionData(
+      "modifyLiquidities",
+      [inner, deadline]
+  );
+
+  const bal0Before = await ethers.provider.getBalance(user.address);
+  const bal1Before = await limToken.balanceOf(user.address);
+
+  const tx = await positionManager.connect(user).multicall([callData], { value: 0 });
+  const receipt = await tx.wait();
+  console.log(`✅ userDecreasesLiquidity() done, Gas Used: ${receipt.gasUsed}`);
+
+  const bal0After = await ethers.provider.getBalance(user.address);
+  const bal1After = await limToken.balanceOf(user.address);
+
+  console.log(`token0 received: ${bal0After - bal0Before}`);
+  console.log(`token1 received: ${bal1After - bal1Before}`);
 }
 
 async function testExactAmounts(poolHelper) {

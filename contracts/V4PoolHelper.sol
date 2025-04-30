@@ -242,6 +242,72 @@ contract V4PoolHelper is Ownable, AccessControl {
         );
     }
 
+    /// @notice  Build decrease-liquidity action & params for the caller’s single position
+    function buildDecreaseLiquidityParamsForUser(
+        address token0,
+        address token1,
+        uint128 liquidityDelta,
+        uint128 amount0Min,
+        uint128 amount1Min
+    ) external view returns (bytes memory actions, bytes[] memory params) {
+        // 1) Ensure the user has a position
+        uint256 tokenId = userTokenIds[msg.sender];
+        require(tokenId != 0, "Not minted yet");
+
+        // 2) Encode the actions: DECREASE_LIQUIDITY + TAKE_PAIR
+        actions = abi.encodePacked(
+            uint8(Actions.DECREASE_LIQUIDITY),
+            uint8(Actions.TAKE_PAIR)
+        );
+
+        // 3) Prepare params array
+        params = new bytes[](2);
+
+        // 3a) Action 0: decrease liquidity
+        params[0] = abi.encode(
+            tokenId,
+            liquidityDelta,
+            // minimum token amounts to receive
+            amount0Min,
+            amount1Min,
+            // inline hookData for settlement (token IDs & native flags)
+            abi.encode(
+                CurrencyLibrary.fromId(uint160(token0)),
+                CurrencyLibrary.fromId(uint160(token1)),
+                token0 == address(0),
+                token1 == address(0)
+            )
+        );
+
+        // 3b) Action 1: take pair (same hookData as above, no extra args)
+        params[1] = abi.encode(
+            CurrencyLibrary.fromId(uint160(token0)),
+            CurrencyLibrary.fromId(uint160(token1)),
+            msg.sender
+        );
+    }
+
+    /// @notice  Preview token amounts for a given liquidity decrease using internal helper
+    function previewAmountsForLiquidity(uint128 liquidityDelta)external view returns (uint256 amount0, uint256 amount1) {
+        // 1) Ensure the position exists and pool is initialized
+        uint256 tokenId = userTokenIds[msg.sender];
+        require(tokenId != 0, "Position not minted yet");
+        require(standardTickLower < standardTickUpper, "Pool not initialized");
+
+        // 2) Load current price and tick boundaries
+        uint160 sqrtP = poolSqrtPriceX96;
+        uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
+        uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
+
+        // 3) Delegate to your internal helper
+        (amount0, amount1) = _getAmountsForLiquidity(
+            liquidityDelta,
+            sqrtA,
+            sqrtB,
+            sqrtP
+        );
+    }
+
     /// @notice Given exactly one of amount0 or amount1, returns the matching pair for that exact input.
     /// @param exact0   If >0, compute how much token1 is needed for this exact amount0; otherwise must be 0.
     /// @param exact1   If >0, compute how much token0 is needed for this exact amount1; otherwise must be 0.

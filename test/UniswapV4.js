@@ -10,28 +10,42 @@ const PERMIT2_ADDRESS = FORK_MAINNET ? "0x000000000022D473030F116dDEE9F6B43aC78B
 const UNIVERSAL_ROUTER = FORK_MAINNET ? "0xa51afafe0263b40edaef0df8781ea9aa03e381a3" : "0xefd1d4bd4cf1e86da286bb4cb1b8bced9c10ba47";
 
 const POSITION_MANAGER_ABI = [
-    {
-      "inputs": [
-        { "internalType": "bytes",   "name": "unlockData", "type": "bytes"   },
-        { "internalType": "uint256", "name": "deadline",   "type": "uint256" }
-      ],
-      "name": "modifyLiquidities",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        { "internalType": "bytes[]", "name": "data", "type": "bytes[]" }
-      ],
-      "name": "multicall",
-      "outputs": [
-        { "internalType": "bytes[]", "name": "results", "type": "bytes[]" }
-      ],
-      "stateMutability": "payable",
-      "type": "function"
-    }
-];  
+  {
+    inputs: [
+      { internalType: "bytes", name: "unlockData", type: "bytes" },
+      { internalType: "uint256", name: "deadline",   type: "uint256" }
+    ],
+    name: "modifyLiquidities",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function"
+  },
+  {
+    inputs: [{ internalType: "bytes[]", name: "data", type: "bytes[]" }],
+    name: "multicall",
+    outputs: [{ internalType: "bytes[]", name: "results", type: "bytes[]" }],
+    stateMutability: "payable",
+    type: "function"
+  },
+  {
+    inputs: [{ internalType: "address", name: "owner", type: "address" }],
+    name: "balanceOf",
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function"
+  },
+  // ERC-721 Transfer event (must include for filters.Transfer to work)
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true,  internalType: "address", name: "from",    type: "address" },
+      { indexed: true,  internalType: "address", name: "to",      type: "address" },
+      { indexed: true,  internalType: "uint256", name: "tokenId", type: "uint256" }
+    ],
+    name: "Transfer",
+    type: "event"
+  }
+];
 
 const PERMIT2_ABI = [
     // approve(token, spender, amount, expiration)
@@ -152,8 +166,9 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     const totalContributions = await presale.totalContributions();
     expect(totalContributions).to.equal(0);
 
-    await testExactAmounts(poolHelper);
+    //await testExactAmounts(poolHelper);
     await userMintsPosition(poolHelper, user1);
+    await userIncreasesLiquidity(poolHelper, user1);
 
     // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
     await swapHelper.approveTokenWithPermit2(limToken.target);
@@ -253,18 +268,86 @@ async function userMintsPosition(poolHelper, user) {
     const deadline = (await ethers.provider.getBlock("latest")).timestamp + 120;
 
     // 7) Now call multicall, *not* modifyLiquidities directly
-    const callData = positionManager.interface.encodeFunctionData(
-        "modifyLiquidities",
-        [ inner, deadline ]
-    );
-    await positionManager
-        .connect(user)
-        .multicall(
-            [ callData ],
-            { value: finalETH }
+    const callData = positionManager.interface.encodeFunctionData("modifyLiquidities", [ inner, deadline ]);
+    const tx = await positionManager.connect(user).multicall([ callData ], { value: finalETH });
+    const receipt = await tx.wait();
+    const gasUsed = receipt.gasUsed;
+    console.log(`✅ userMintPosition() completed, Gas Used in units: ${gasUsed}`);
+    
+    // 1) Define the event filter for Transfer(0x0 → user)
+    const filter = positionManager.filters.Transfer(
+      ethers.ZeroAddress,
+      user.address
     );
 
-    console.log("✅ userMintPosition() completed");
+    // 2) Query only the current block for matching events
+    const events = await positionManager.queryFilter(
+      filter,
+      receipt.blockNumber,
+      receipt.blockNumber
+    );
+
+    // 3) Pull out the last matching event (should be your mint)
+    if (events.length === 0) {
+      throw new Error("No mint Transfer event found");
+    }
+    const tokenId = events[events.length - 1].args.tokenId;
+    console.log("🆔 Minted Position tokenId =", tokenId.toString());
+
+    // 4) Store it on-chain
+    await poolHelper.connect(user).storeTokenId(tokenId);
+    console.log("✅ userMintPosition(): token ID stored");
+}
+
+async function userIncreasesLiquidity(poolHelper, user) {
+    console.log("user address in userIncreasesLiquidity : ", user.address);
+
+    const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
+    const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, user);
+
+    // 1) Define additional liquidity amounts
+    const [extraETH, extraLIM] = await poolHelper.getAmountsForExact(
+        ethers.parseEther("0.05"), // target ETH
+        0                          // set LIM to zero to indicate ETH-driven
+    );
+
+    console.log(`extraETH ${extraETH}, extraLIM ${extraLIM}`);
+
+    // 2) Approve LIM if using LIM (skip if only using ETH)
+    if (extraLIM > 0) {
+        await limToken.connect(user).approve(PERMIT2_ADDRESS, ethers.parseUnits("20000000000", 18));
+        const expiration = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365;
+        const MAX_ALLOW = (1n << 160n) - 1n;
+        await permit2.approve(limToken.target, POSITION_MANAGER, MAX_ALLOW, expiration);
+    }
+
+    // 3) Build calldata via the helper
+    const [actions, params] = await poolHelper.connect(user)
+        .buildIncreaseLiquidityParamsForUser(
+            ethers.ZeroAddress,       // token0 (ETH)
+            limToken.target,          // token1 (LIM)
+            extraETH,                 // amount0 (ETH)
+            extraLIM                  // amount1 (LIM)
+        );
+
+    const inner = ethers.AbiCoder.defaultAbiCoder().encode(
+        ["bytes", "bytes[]"],
+        [actions, params]
+    );
+    const deadline = (await ethers.provider.getBlock("latest")).timestamp + 120;
+
+    const callData = positionManager.interface.encodeFunctionData(
+        "modifyLiquidities",
+        [inner, deadline]
+    );
+
+    const tx = await positionManager.connect(user).multicall(
+        [callData],
+        { value: extraETH } // send ETH here
+    );
+    const receipt = await tx.wait();
+    const gasUsed = receipt.gasUsed;
+    console.log(`✅ userIncreasesLiquidity() completed, Gas Used in units: ${gasUsed}`);
 }
 
 async function testExactAmounts(poolHelper) {
@@ -300,27 +383,6 @@ async function testExactAmounts(poolHelper) {
         console.log(`${label} → ❌ Error: ${e.reason || e.message}`);
       }
     }
-}
-  
-async function testAllowedContribution(contract, buyer){
-    const getAllowedContribution = await contract.getAllowedContribution(buyer);
-    console.log(`getAllowedContribution : ${getAllowedContribution}`)
-}
-
-async function testRemainingTime(contract, timeToIncrease){
-    await ethers.provider.send("evm_increaseTime", [timeToIncrease]);
-    await ethers.provider.send("evm_mine");
-    
-    const getRemainingTime = await contract.getRemainingTime();
-    console.log(`getRemainingTime : ${getRemainingTime}`)
-}
-
-async function testGetterFunctions(contract){
-    const minCapNotReached = await contract.minCapReached();
-    console.log(`minCapNotReached : ${minCapNotReached}`)
-
-    const buyersCount = await contract.getBuyersCount();
-    console.log(`buyersCount : ${buyersCount}`)
 }
 
 async function log_EthBalance(address, name) {

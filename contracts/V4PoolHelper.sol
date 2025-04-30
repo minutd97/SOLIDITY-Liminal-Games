@@ -198,6 +198,50 @@ contract V4PoolHelper is Ownable, AccessControl {
         params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
     }
 
+    function buildIncreaseLiquidityParamsForUser(address token0, address token1, uint256 amount0Desired, uint256 amount1Desired) external view returns (bytes memory actions, bytes[] memory params) {
+        uint256 tokenId = userTokenIds[msg.sender];
+        require(tokenId != 0, "Not minted yet");
+        require(standardTickLower < standardTickUpper, "Pool not initialized");
+        require(amount0Desired > 0 && amount1Desired > 0, "Amounts must be > 0");
+
+        // 1) Compute how much liquidity that amount buys at current price
+        uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmounts(
+            poolSqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(standardTickLower),
+            TickMath.getSqrtPriceAtTick(standardTickUpper),
+            amount0Desired,
+            amount1Desired
+        );
+        require(liquidityDelta > 0, "No additional liquidity");
+
+        // 2) Build the action bytes
+        actions = abi.encodePacked(
+            uint8(Actions.INCREASE_LIQUIDITY),
+            uint8(Actions.SETTLE_PAIR)
+        );
+
+        // 3) Inline everything into the params array
+        params = new bytes[](2);
+        params[0] = abi.encode(
+            tokenId,
+            liquidityDelta,
+            // max amounts = desired + 1 (buffer)
+            uint128(amount0Desired + 1),
+            uint128(amount1Desired + 1),
+            // hookData inline
+            abi.encode(
+                CurrencyLibrary.fromId(uint160(token0)),
+                CurrencyLibrary.fromId(uint160(token1)),
+                token0 == address(0),
+                token1 == address(0)
+            )
+        );
+        params[1] = abi.encode(
+            CurrencyLibrary.fromId(uint160(token0)),
+            CurrencyLibrary.fromId(uint160(token1))
+        );
+    }
+
     /// @notice Given exactly one of amount0 or amount1, returns the matching pair for that exact input.
     /// @param exact0   If >0, compute how much token1 is needed for this exact amount0; otherwise must be 0.
     /// @param exact1   If >0, compute how much token0 is needed for this exact amount1; otherwise must be 0.
@@ -265,6 +309,11 @@ contract V4PoolHelper is Ownable, AccessControl {
                 Q96
             );
         }
+    }
+
+    function storeTokenId(uint256 tokenId) external {
+        require(userTokenIds[msg.sender] == 0, "Already stored");
+        userTokenIds[msg.sender] = tokenId;
     }
 
     function setupPermit2Approvals(address token0, address token1) external onlyRole(POOL_CREATOR) {

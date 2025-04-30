@@ -29,12 +29,12 @@ contract LiminalToken is ERC20Votes, Pausable, Ownable {
     function transferFrom(address from, address to, uint256 amount) public override whenNotPaused returns (bool) {
         if (msg.sender == 0x000000000022D473030F116dDEE9F6B43aC78BA3)
         {
-            console.log("transferFrom called");
-            console.log("msg.sender:", msg.sender);
-            console.log("from:", from);
-            console.log("to:", to);
-            console.log("amount:", amount);
-            console.log("allowance from->msg.sender:", allowance(from, msg.sender));
+            // console.log("transferFrom called");
+            // console.log("msg.sender:", msg.sender);
+            // console.log("from:", from);
+            // console.log("to:", to);
+            // console.log("amount:", amount);
+            // console.log("allowance from->msg.sender:", allowance(from, msg.sender));
         }
 
         return super.transferFrom(from, to, amount);

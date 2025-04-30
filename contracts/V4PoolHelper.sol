@@ -17,9 +17,6 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {FixedPoint96} from "@uniswap/v4-core/src/libraries/FixedPoint96.sol";
 
-/// @dev Only include this during Hardhat testing
-import "hardhat/console.sol";
-
 struct PoolInput {
     address token0;
     address token1;
@@ -126,113 +123,6 @@ contract V4PoolHelper is Ownable, AccessControl {
         require(tickLower < tickUpper, "Invalid ticks calculated");
     }
 
-    function buildMintParamsForUser(PoolInput calldata input) external view returns (bytes memory actions, bytes[] memory params, uint256 valueToSend) {
-        // 1) Basic guards
-        require(userTokenIds[msg.sender] == 0, "Already minted");
-        require(standardTickLower < standardTickUpper, "Pool not init");
-
-        // 2) Sort and wrap tokens
-        (address t0, address t1) = input.token0 < input.token1
-            ? (input.token0, input.token1)
-            : (input.token1, input.token0);
-        Currency c0 = CurrencyLibrary.fromId(uint160(t0));
-        Currency c1 = CurrencyLibrary.fromId(uint160(t1));
-
-        PoolKey memory pk = PoolKey({
-            currency0: c0,
-            currency1: c1,
-            fee: input.fee,
-            tickSpacing: input.tickSpacing,
-            hooks: IHooks(address(0))
-        });
-
-        // 3) Compute price and liquidity
-        uint160 sqrtP = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);
-        uint128 liq = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtP,
-            TickMath.getSqrtPriceAtTick(standardTickLower),
-            TickMath.getSqrtPriceAtTick(standardTickUpper),
-            input.amount0,
-            input.amount1
-        );
-        require(liq > 0, "No liquidity");
-
-        // 4) Invert to exact token pulls
-        (uint256 amt0, uint256 amt1) = _getAmountsForLiquidity(
-            sqrtP,
-            TickMath.getSqrtPriceAtTick(standardTickLower),
-            TickMath.getSqrtPriceAtTick(standardTickUpper),
-            liq
-        );
-
-        // add 1 wei/token as slippage buffer
-        amt0 += 1;
-        amt1 += 1;
-
-        // 5) Value to send (native ETH if t0 is zero‐address)
-        valueToSend = (t0 == address(0)) ? amt0 : 0;
-
-        // 6) Build actions bytes
-        actions = abi.encodePacked(
-            uint8(Actions.MINT_POSITION),
-            uint8(Actions.SETTLE_PAIR)
-        );
-
-        // 7) Build params array: [MINT_POSITION, SETTLE_PAIR]
-        params = new bytes[](2);
-        params[0] = abi.encode(
-            pk,
-            standardTickLower,
-            standardTickUpper,
-            liq,
-            type(uint128).max,
-            type(uint128).max,
-            msg.sender,
-            bytes("")    // hookData
-        );
-        params[1] = abi.encode(c0, c1);
-    }
-
-    // Helper to invert LiquidityAmounts.getLiquidityForAmounts
-    function _getAmountsForLiquidity(
-        uint160 sqrtPriceX96,
-        uint160 sqrtA,
-        uint160 sqrtB,
-        uint128 liquidity
-    ) internal pure returns (uint256 amount0, uint256 amount1) {
-        if (sqrtA > sqrtB) (sqrtA, sqrtB) = (sqrtB, sqrtA);
-
-        // entirely below range → all token0
-        if (sqrtPriceX96 <= sqrtA) {
-            amount0 = FullMath.mulDiv(
-                uint256(liquidity) << FixedPoint96.RESOLUTION,
-                (sqrtB - sqrtA),
-                uint256(sqrtA) * sqrtB
-            );
-        }
-        // in‐range → both
-        else if (sqrtPriceX96 < sqrtB) {
-            amount0 = FullMath.mulDiv(
-                uint256(liquidity) << FixedPoint96.RESOLUTION,
-                (sqrtB - sqrtPriceX96),
-                uint256(sqrtPriceX96) * sqrtB
-            );
-            amount1 = FullMath.mulDiv(
-                liquidity,
-                (sqrtPriceX96 - sqrtA),
-                uint256(1) << FixedPoint96.RESOLUTION
-            );
-        }
-        // entirely above range → all token1
-        else {
-            amount1 = FullMath.mulDiv(
-                liquidity,
-                (sqrtB - sqrtA),
-                uint256(1) << FixedPoint96.RESOLUTION
-            );
-        }
-    }
-
     function buildPositionParams(PoolKey memory pool, bytes memory actions, bytes[] memory mintParams, uint160 sqrtPriceX96) internal view returns (bytes[] memory) {
         bytes[] memory params = new bytes[](2);
         params[0] = abi.encodeWithSelector(
@@ -262,6 +152,60 @@ contract V4PoolHelper is Ownable, AccessControl {
         );
         mintParams[1] = abi.encode(pool.currency0, pool.currency1);
         return mintParams;
+    }
+
+    function buildMintParamsForUser(PoolInput calldata input) external view returns (bytes memory actions, bytes[] memory params){
+        require(userTokenIds[msg.sender] == 0, "Already minted");
+        require(standardTickLower < standardTickUpper, "Pool not initialized");
+
+        // No sorting needed, we trust ETH is always token0
+        address token0 = input.token0;
+        address token1 = input.token1;
+
+        PoolKey memory poolKey = PoolKey({
+            currency0: CurrencyLibrary.fromId(uint160(token0)),
+            currency1: CurrencyLibrary.fromId(uint160(token1)),
+            fee: input.fee,
+            tickSpacing: input.tickSpacing,
+            hooks: IHooks(address(0))
+        });
+
+        uint160 sqrtPriceX96 = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);
+        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(standardTickLower),
+            TickMath.getSqrtPriceAtTick(standardTickUpper),
+            input.amount0,
+            input.amount1
+        );
+        require(liquidity > 0, "No liquidity");
+
+        // Build actions
+        actions = abi.encodePacked(
+            uint8(Actions.MINT_POSITION),
+            uint8(Actions.SETTLE_PAIR)
+        );
+
+        // Build params
+        params = new bytes[](2);
+
+        params[0] = abi.encode(
+            poolKey,
+            standardTickLower,
+            standardTickUpper,
+            liquidity,
+            type(uint128).max,
+            type(uint128).max,
+            msg.sender,
+            abi.encode(
+                poolKey.currency0,
+                poolKey.currency1,
+                token0 == address(0),
+                token1 == address(0)
+            )
+        );
+
+        params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
     }
 
     function setupPermit2Approvals(address token0, address token1) external onlyRole(POOL_CREATOR) {

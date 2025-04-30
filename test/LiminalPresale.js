@@ -104,6 +104,8 @@ describe("LiminalPresale", function () {
     await presale.connect(owner).depositPresaleTokens(tokensForPresale);
 
     await limToken.transfer(user1.address, ethers.parseUnits("1000000", 18));
+    await log_TokenBalance(limToken, "LIM", user1.address, "user1");
+    console.log("user 1 address : ", user1.address);
 
     return { owner, user1, user2, presale, poolHelper};
   }
@@ -295,6 +297,8 @@ async function swap(_zeroForOne, _amountIn, _user) {
 }
 
 async function userMintsPosition(poolHelper, user) {
+    console.log("user address in userMintsPosition : ", user.address);
+    
     // 1) Instantiate PositionManager contract connected to the user
     const positionManager = new ethers.Contract(
       POSITION_MANAGER,
@@ -303,14 +307,13 @@ async function userMintsPosition(poolHelper, user) {
     );
   
     // 2) Define how much the user wants to deposit
-    const userEthAmount   = ethers.parseEther("1.0");         // 1 ETH
+    const userEthAmount   = ethers.parseEther("0.15");         // 1 ETH
     const userTokenAmount = ethers.parseUnits("200000", 18); // 200k LIM
-  
-    const MAX_ALLOW = (1n << 160n) - 1n; 
+
     // 3a) Approve the ERC-20 itself so Permit2 can pull your LIM
     await limToken.connect(user).approve(
         PERMIT2_ADDRESS,   // Permit2 forwarder
-        MAX_ALLOW          // same max‐uint160 or at least userTokenAmount
+        ethers.parseUnits("20000000000", 18)
     );
     const erc20Allow = await limToken.allowance(user.address, PERMIT2_ADDRESS);
     console.log("🛠 ERC20 → Permit2 allowance:", erc20Allow.toString());    
@@ -323,6 +326,7 @@ async function userMintsPosition(poolHelper, user) {
       );
     
     const expiration = Math.floor(Date.now()/1000) + 60*60*24*365; // one year from now
+    const MAX_ALLOW = (1n << 160n) - 1n; 
     await permit2.approve(
         limToken.target,          // the token you’re allowing
         POSITION_MANAGER,         // the Uniswap v4 PositionManager (spender)
@@ -351,26 +355,25 @@ async function userMintsPosition(poolHelper, user) {
     };
   
     // 5) Build the PoolInput and fetch the Uniswap call data
-    const [ actions, params, valueToSend ] =
-    await poolHelper.connect(user).buildMintParamsForUser(poolInput);
+    const [ actions, params ] = await poolHelper.connect(user).buildMintParamsForUser(poolInput);
 
     // 6) Pack the inner encode for modifyLiquidities
     const inner = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["bytes","bytes[]"],
-    [ actions, params ]
+        ["bytes","bytes[]"],
+        [ actions, params ]
     );
     const deadline = (await ethers.provider.getBlock("latest")).timestamp + 120;
 
     // 7) Now call multicall, *not* modifyLiquidities directly
     const callData = positionManager.interface.encodeFunctionData(
-    "modifyLiquidities",
-    [ inner, deadline ]
+        "modifyLiquidities",
+        [ inner, deadline ]
     );
     await positionManager
-    .connect(user)
-    .multicall(
-        [ callData ],
-        { value: valueToSend }
+        .connect(user)
+        .multicall(
+            [ callData ],
+            { value: userEthAmount }
     );
 
     console.log("✅ userMintPosition() completed");

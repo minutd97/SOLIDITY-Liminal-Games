@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -14,8 +15,6 @@ import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IAllowanceTransfer} from "@uniswap/v4-periphery/lib/permit2/src/interfaces/IAllowanceTransfer.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {FixedPoint96} from "@uniswap/v4-core/src/libraries/FixedPoint96.sol";
 
 struct PoolInput {
     address token0;
@@ -28,14 +27,6 @@ struct PoolInput {
     int24 tickUpper;
 }
 
-struct MintContext {
-    PoolKey pool;
-    Currency currency0;
-    Currency currency1;
-    uint128 liquidity;
-    uint256 valueToSend;
-}
-
 contract V4PoolHelper is Ownable, AccessControl {
     using CurrencyLibrary for Currency;
 
@@ -45,8 +36,11 @@ contract V4PoolHelper is Ownable, AccessControl {
     IPositionManager public immutable positionManager;
     IAllowanceTransfer public immutable permit2;
 
+    uint256 private constant Q96 = 2**96;
+    uint160 public poolSqrtPriceX96;
     int24 public standardTickLower;
     int24 public standardTickUpper;
+
     mapping(address => uint256) public userTokenIds;
 
     constructor(address _poolManager, address _positionManager, address _permit2) Ownable(msg.sender) {
@@ -58,6 +52,7 @@ contract V4PoolHelper is Ownable, AccessControl {
 
     function createPoolAndAddLiquidity(PoolInput calldata _input) external payable onlyRole(POOL_CREATOR) {
         (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) = calculateTicks(_input);
+        poolSqrtPriceX96 = sqrtPriceX96;
         standardTickLower = tickLower;
         standardTickUpper = tickUpper;
 
@@ -70,15 +65,10 @@ contract V4PoolHelper is Ownable, AccessControl {
             tickSpacing: _input.tickSpacing,
             tickLower: tickLower,
             tickUpper: tickUpper
-        });
-        
-        bool isCorrectOrder = input.token0 < input.token1;
-        (address sorted0, address sorted1) = isCorrectOrder
-            ? (input.token0, input.token1)
-            : (input.token1, input.token0);
+        });    
 
-        Currency currency0 = CurrencyLibrary.fromId(uint160(sorted0));
-        Currency currency1 = CurrencyLibrary.fromId(uint160(sorted1));
+        Currency currency0 = CurrencyLibrary.fromId(uint160(input.token0));
+        Currency currency1 = CurrencyLibrary.fromId(uint160(input.token1));
 
         PoolKey memory pool = PoolKey({
             currency0: currency0,
@@ -154,7 +144,7 @@ contract V4PoolHelper is Ownable, AccessControl {
         return mintParams;
     }
 
-    function buildMintParamsForUser(PoolInput calldata input) external view returns (bytes memory actions, bytes[] memory params){
+    function buildMintParamsForUser(PoolInput calldata input) external view returns (bytes memory actions, bytes[] memory params) {
         require(userTokenIds[msg.sender] == 0, "Already minted");
         require(standardTickLower < standardTickUpper, "Pool not initialized");
 
@@ -206,6 +196,57 @@ contract V4PoolHelper is Ownable, AccessControl {
         );
 
         params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
+    }
+
+    function getRequiredTokenAmounts(uint256 amount0Desired, uint256 amount1Desired) external view returns (uint256 finalAmount0, uint256 finalAmount1) {
+        require(standardTickLower < standardTickUpper, "Pool not initialized");
+
+        // Compute the liquidity for your desired amounts at the real pool price:
+        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            poolSqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(standardTickLower),
+            TickMath.getSqrtPriceAtTick(standardTickUpper),
+            amount0Desired,
+            amount1Desired
+        );
+        require(liquidity > 0, "Insufficient liquidity");
+
+        // Convert that liquidity back into the *exact* amounts you must supply:
+        (finalAmount0, finalAmount1) = _getAmountsForLiquidity(
+            liquidity,
+            TickMath.getSqrtPriceAtTick(standardTickLower),
+            TickMath.getSqrtPriceAtTick(standardTickUpper),
+            poolSqrtPriceX96
+        );
+    }
+
+    function _getAmountsForLiquidity(uint128 liquidity, uint160 sqrtRatioAX96, uint160 sqrtRatioBX96, uint160 sqrtPriceX96) internal pure returns (uint256 amount0, uint256 amount1) {
+        if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+
+        if (sqrtPriceX96 <= sqrtRatioAX96) {
+            amount0 = FullMath.mulDiv(
+                uint256(liquidity) << 96,
+                uint256(sqrtRatioBX96 - sqrtRatioAX96),
+                uint256(sqrtRatioAX96) * sqrtRatioBX96
+            );
+        } else if (sqrtPriceX96 < sqrtRatioBX96) {
+            amount0 = FullMath.mulDiv(
+                uint256(liquidity) << 96,
+                uint256(sqrtRatioBX96 - sqrtPriceX96),
+                uint256(sqrtPriceX96) * sqrtRatioBX96
+            );
+            amount1 = FullMath.mulDiv(
+                liquidity,
+                sqrtPriceX96 - sqrtRatioAX96,
+                Q96
+            );
+        } else {
+            amount1 = FullMath.mulDiv(
+                liquidity,
+                sqrtRatioBX96 - sqrtRatioAX96,
+                Q96
+            );
+        }
     }
 
     function setupPermit2Approvals(address token0, address token1) external onlyRole(POOL_CREATOR) {

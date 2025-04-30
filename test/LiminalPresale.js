@@ -103,7 +103,7 @@ describe("LiminalPresale", function () {
     await limToken.connect(owner).approve(presale.target, tokensForPresale)
     await presale.connect(owner).depositPresaleTokens(tokensForPresale);
 
-    await limToken.transfer(user1.address, ethers.parseUnits("1000000", 18));
+    await limToken.transfer(user1.address, ethers.parseUnits("70000000", 18));
     await log_TokenBalance(limToken, "LIM", user1.address, "user1");
     console.log("user 1 address : ", user1.address);
 
@@ -248,6 +248,7 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     const totalContributions = await presale.totalContributions();
     expect(totalContributions).to.equal(0);
 
+    await dumpRequiredAmounts(poolHelper);
     await userMintsPosition(poolHelper, user1);
 
     // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
@@ -299,55 +300,38 @@ async function swap(_zeroForOne, _amountIn, _user) {
 async function userMintsPosition(poolHelper, user) {
     console.log("user address in userMintsPosition : ", user.address);
     
-    // 1) Instantiate PositionManager contract connected to the user
-    const positionManager = new ethers.Contract(
-      POSITION_MANAGER,
-      POSITION_MANAGER_ABI,
-      user
-    );
+    // 1) Instantiate PositionManager and Permit2 contracts connected to the user
+    const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
+    const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, user);
   
     // 2) Define how much the user wants to deposit
-    const userEthAmount   = ethers.parseEther("0.15");         // 1 ETH
-    const userTokenAmount = ethers.parseUnits("200000", 18); // 200k LIM
+    const [finalETH, finalLIM] = await poolHelper.getRequiredTokenAmounts(
+        ethers.parseEther("0.15"), // ETH
+        ethers.parseUnits("200000", 18) // upper-bound — doesn't matter if it's too high, LIM
+    );
+      
+    console.log("Exact amounts needed → ETH:", finalETH.toString(), "LIM:", finalLIM.toString());
 
     // 3a) Approve the ERC-20 itself so Permit2 can pull your LIM
-    await limToken.connect(user).approve(
-        PERMIT2_ADDRESS,   // Permit2 forwarder
-        ethers.parseUnits("20000000000", 18)
-    );
-    const erc20Allow = await limToken.allowance(user.address, PERMIT2_ADDRESS);
-    console.log("🛠 ERC20 → Permit2 allowance:", erc20Allow.toString());    
+    await limToken.connect(user).approve(PERMIT2_ADDRESS, ethers.parseUnits("20000000000", 18));
+    //const erc20Allow = await limToken.allowance(user.address, PERMIT2_ADDRESS);
+    //console.log("🛠 ERC20 → Permit2 allowance:", erc20Allow.toString());    
 
-    // 3) Approve Permit2
-    const permit2 = new ethers.Contract(
-        PERMIT2_ADDRESS,
-        PERMIT2_ABI,
-        user
-      );
-    
+    // 3b) Approve Permit2
     const expiration = Math.floor(Date.now()/1000) + 60*60*24*365; // one year from now
     const MAX_ALLOW = (1n << 160n) - 1n; 
-    await permit2.approve(
-        limToken.target,          // the token you’re allowing
-        POSITION_MANAGER,         // the Uniswap v4 PositionManager (spender)
-        MAX_ALLOW,          // max amount it may pull
-        expiration                // timestamp after which this permit expires
-    );
+    await permit2.approve(limToken.target, POSITION_MANAGER, MAX_ALLOW, expiration);
   
     // Optional: read it back
-    const [amt, exp, nonce] = await permit2.allowance(
-        user.address,
-        limToken.target,
-        POSITION_MANAGER
-    );
-    console.log(`✅ Permit2: ${amt.toString()} LIM approved until ${exp.toString()} (nonce ${nonce.toString()})`);
+    // const [amt, exp, nonce] = await permit2.allowance(user.address, limToken.target, POSITION_MANAGER);
+    // console.log(`✅ Permit2: ${amt.toString()} LIM approved until ${exp.toString()} (nonce ${nonce.toString()})`);
 
     // 4) Build the PoolInput object expected by your helper
     const poolInput = {
       token0:     ethers.ZeroAddress,
       token1:     limToken.target,
-      amount0:    userEthAmount,
-      amount1:    userTokenAmount,
+      amount0:    finalETH,
+      amount1:    finalLIM,
       fee:        300,
       tickSpacing:60,
       tickLower:  0,  // these are ignored by buildMintParamsForUser
@@ -373,10 +357,32 @@ async function userMintsPosition(poolHelper, user) {
         .connect(user)
         .multicall(
             [ callData ],
-            { value: userEthAmount }
+            { value: finalETH }
     );
 
     console.log("✅ userMintPosition() completed");
+}
+
+async function dumpRequiredAmounts(poolHelper) {
+    const pairs = [
+      // ETH‐driven cases (LIM upper‐bound really huge)
+      { label: "ETH only – 0.05 ETH",  eth: ethers.parseEther("0.05"),  lim: ethers.MaxUint256 },
+      { label: "ETH only – 0.15 ETH",  eth: ethers.parseEther("0.15"),  lim: ethers.MaxUint256 },
+      { label: "ETH only – 1.00 ETH",  eth: ethers.parseEther("1.0"),   lim: ethers.MaxUint256 },
+  
+      // LIM‐driven cases (ETH upper‐bound really huge)
+      { label: "LIM only – 10 000",     eth: ethers.MaxUint256,           lim: ethers.parseUnits("10000",18) },
+      { label: "LIM only – 200 000",    eth: ethers.MaxUint256,           lim: ethers.parseUnits("200000",18) },
+      { label: "LIM only – 1 000 000",  eth: ethers.MaxUint256,           lim: ethers.parseUnits("1000000",18) },
+  
+      // Mixed‐bound case
+      { label: "Mixed – 0.15 ETH & 200 000 LIM", eth: ethers.parseEther("0.15"), lim: ethers.parseUnits("200000",18) },
+    ];
+  
+    for (const { label, eth, lim } of pairs) {
+      const [useEth, useLim] = await poolHelper.getRequiredTokenAmounts(eth, lim);
+      console.log(`${label} → ETH: ${useEth.toString()} (~${ethers.formatEther(useEth)})  LIM: ${useLim.toString()} (~${ethers.formatUnits(useLim,18)})`);
+    }
 }
 
 async function testAllowedContribution(contract, buyer){

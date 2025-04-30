@@ -13,7 +13,7 @@ const POSITION_MANAGER_ABI = [
   {
     inputs: [
       { internalType: "bytes", name: "unlockData", type: "bytes" },
-      { internalType: "uint256", name: "deadline",   type: "uint256" }
+      { internalType: "uint256", name: "deadline", type: "uint256" }
     ],
     name: "modifyLiquidities",
     outputs: [],
@@ -54,10 +54,28 @@ const POSITION_MANAGER_ABI = [
     type: "function"
   },
   {
+    inputs: [
+      { internalType: "uint256", name: "tokenId", type: "uint256" }
+    ],
+    name: "positionInfo",
+    outputs: [
+      { internalType: "bytes32", name: "poolId", type: "bytes32" },
+      { internalType: "int24", name: "tickLower", type: "int24" },
+      { internalType: "int24", name: "tickUpper", type: "int24" },
+      { internalType: "uint128", name: "liquidity", type: "uint128" },
+      { internalType: "uint256", name: "feeGrowthInside0LastX128", type: "uint256" },
+      { internalType: "uint256", name: "feeGrowthInside1LastX128", type: "uint256" },
+      { internalType: "uint128", name: "tokensOwed0", type: "uint128" },
+      { internalType: "uint128", name: "tokensOwed1", type: "uint128" }
+    ],
+    stateMutability: "view",
+    type: "function"
+  },
+  {
     anonymous: false,
     inputs: [
-      { indexed: true, internalType: "address", name: "from",    type: "address" },
-      { indexed: true, internalType: "address", name: "to",      type: "address" },
+      { indexed: true, internalType: "address", name: "from", type: "address" },
+      { indexed: true, internalType: "address", name: "to", type: "address" },
       { indexed: true, internalType: "uint256", name: "tokenId", type: "uint256" }
     ],
     name: "Transfer",

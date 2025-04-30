@@ -198,25 +198,43 @@ contract V4PoolHelper is Ownable, AccessControl {
         params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
     }
 
-    function getRequiredTokenAmounts(uint256 amount0Desired, uint256 amount1Desired) external view returns (uint256 finalAmount0, uint256 finalAmount1) {
+    /// @notice Given exactly one of amount0 or amount1, returns the matching pair for that exact input.
+    /// @param exact0   If >0, compute how much token1 is needed for this exact amount0; otherwise must be 0.
+    /// @param exact1   If >0, compute how much token0 is needed for this exact amount1; otherwise must be 0.
+    /// @return amount0 The actual amount0 you must supply (equals exact0 if you drove on exact0, or computed if drove on exact1)
+    /// @return amount1 The actual amount1 you must supply (equals exact1 if you drove on exact1, or computed if drove on exact0)
+    function getAmountsForExact(uint256 exact0, uint256 exact1) external view returns (uint256 amount0, uint256 amount1) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
+        require((exact0 == 0) != (exact1 == 0), "Specify exactly one exact amount");
 
-        // Compute the liquidity for your desired amounts at the real pool price:
-        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
-            poolSqrtPriceX96,
-            TickMath.getSqrtPriceAtTick(standardTickLower),
-            TickMath.getSqrtPriceAtTick(standardTickUpper),
-            amount0Desired,
-            amount1Desired
-        );
-        require(liquidity > 0, "Insufficient liquidity");
+        uint160 sqrtP = poolSqrtPriceX96;
+        uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
+        uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
 
-        // Convert that liquidity back into the *exact* amounts you must supply:
-        (finalAmount0, finalAmount1) = _getAmountsForLiquidity(
+        // derive liquidity from whichever exact side is set
+        uint128 liquidity;
+        if (exact0 > 0) {
+            // exact0 = ETH side
+            liquidity = LiquidityAmounts.getLiquidityForAmount0(
+                sqrtA,
+                sqrtB,
+                exact0
+            );
+        } else {
+            // exact1 = LIM side
+            liquidity = LiquidityAmounts.getLiquidityForAmount1(
+                sqrtA,
+                sqrtB,
+                exact1
+            );
+        }
+
+        // now convert that liquidity back into the two token amounts
+        (amount0, amount1) = _getAmountsForLiquidity(
             liquidity,
-            TickMath.getSqrtPriceAtTick(standardTickLower),
-            TickMath.getSqrtPriceAtTick(standardTickUpper),
-            poolSqrtPriceX96
+            sqrtA,
+            sqrtB,
+            sqrtP
         );
     }
 

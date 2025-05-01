@@ -57,16 +57,25 @@ const POSITION_MANAGER_ABI = [
     inputs: [
       { internalType: "uint256", name: "tokenId", type: "uint256" }
     ],
-    name: "positionInfo",
+    name: "getPoolAndPositionInfo",
     outputs: [
-      { internalType: "bytes32", name: "poolId", type: "bytes32" },
-      { internalType: "int24", name: "tickLower", type: "int24" },
-      { internalType: "int24", name: "tickUpper", type: "int24" },
-      { internalType: "uint128", name: "liquidity", type: "uint128" },
-      { internalType: "uint256", name: "feeGrowthInside0LastX128", type: "uint256" },
-      { internalType: "uint256", name: "feeGrowthInside1LastX128", type: "uint256" },
-      { internalType: "uint128", name: "tokensOwed0", type: "uint128" },
-      { internalType: "uint128", name: "tokensOwed1", type: "uint128" }
+      {
+        components: [
+          { internalType: "address", name: "currency0", type: "address" },
+          { internalType: "address", name: "currency1", type: "address" },
+          { internalType: "uint24",   name: "fee",       type: "uint24"   },
+          { internalType: "int24",    name: "tickSpacing", type: "int24"  },
+          { internalType: "address",  name: "hooks",     type: "address" }
+        ],
+        internalType: "struct PoolKey",
+        name: "poolKey",
+        type: "tuple"
+      },
+      {
+        internalType: "uint256",
+        name: "info",
+        type: "uint256"
+      }
     ],
     stateMutability: "view",
     type: "function"
@@ -205,7 +214,8 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     //await testExactAmounts(poolHelper);
     await userMintsPosition(poolHelper, user1);
     await userIncreasesLiquidity(poolHelper, user1);
-    await userDecreasesLiquidity(poolHelper, user1);
+    await userCollectsPositionFees(poolHelper, user1);
+    //await userDecreasesLiquidity(poolHelper, user1);
 
     // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
     await swapHelper.approveTokenWithPermit2(limToken.target);
@@ -226,6 +236,10 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     await swap(false, ethers.parseUnits("500000", 18), user1); // Swap 500k LIM -> ETH
 
     console.log("──────────── End of Swap Tests ─────────────");
+
+    await userCollectsPositionFees(poolHelper, user1);
+    await userDecreasesLiquidity(poolHelper, user1);
+    
   });
 });
 
@@ -254,141 +268,143 @@ async function swap(_zeroForOne, _amountIn, _user) {
 }
 
 async function userMintsPosition(poolHelper, user) {
-    console.log("user address in userMintsPosition : ", user.address);
+  console.log("──────────── User Mints Position ─────────────");
+  
+  // 1) Instantiate PositionManager and Permit2 contracts connected to the user
+  const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
+  const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, user);
+
+  // 2) Define how much the user wants to deposit
+  const [finalETH, finalLIM] = await poolHelper.getAmountsForExact(
+      ethers.parseEther("3"), // ETH
+      0
+  );
     
-    // 1) Instantiate PositionManager and Permit2 contracts connected to the user
-    const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
-    const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, user);
+  console.log("Exact amounts needed → ETH:", finalETH.toString(), "LIM:", finalLIM.toString());
+
+  // 3a) Approve the ERC-20 itself so Permit2 can pull your LIM
+  await limToken.connect(user).approve(PERMIT2_ADDRESS, ethers.parseUnits("20000000000", 18));
+  //const erc20Allow = await limToken.allowance(user.address, PERMIT2_ADDRESS);
+  //console.log("🛠 ERC20 → Permit2 allowance:", erc20Allow.toString());    
+
+  // 3b) Approve Permit2
+  const expiration = Math.floor(Date.now()/1000) + 60*60*24*365; // one year from now
+  const MAX_ALLOW = (1n << 160n) - 1n; 
+  await permit2.approve(limToken.target, POSITION_MANAGER, MAX_ALLOW, expiration);
+
+  // Optional: read it back
+  // const [amt, exp, nonce] = await permit2.allowance(user.address, limToken.target, POSITION_MANAGER);
+  // console.log(`✅ Permit2: ${amt.toString()} LIM approved until ${exp.toString()} (nonce ${nonce.toString()})`);
+
+  // 4) Build the PoolInput object expected by your helper
+  const poolInput = {
+    token0:     ethers.ZeroAddress,
+    token1:     limToken.target,
+    amount0:    finalETH,
+    amount1:    finalLIM,
+    fee:        300,
+    tickSpacing:60,
+    tickLower:  0,  // these are ignored by buildMintParamsForUser
+    tickUpper:  0
+  };
+
+  // 5) Build the PoolInput and fetch the Uniswap call data
+  const [ actions, params ] = await poolHelper.connect(user).buildMintParamsForUser(poolInput);
+
+  // 6) Pack the inner encode for modifyLiquidities
+  const inner = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["bytes","bytes[]"],
+      [ actions, params ]
+  );
+  const deadline = (await ethers.provider.getBlock("latest")).timestamp + 120;
+
+  // 7) Now call multicall, *not* modifyLiquidities directly
+  const callData = positionManager.interface.encodeFunctionData("modifyLiquidities", [ inner, deadline ]);
+  const tx = await positionManager.connect(user).multicall([ callData ], { value: finalETH });
+  const receipt = await tx.wait();
+  const gasUsed = receipt.gasUsed;
+  console.log(`✅ userMintPosition() completed, Gas Used in units: ${gasUsed}`);
   
-    // 2) Define how much the user wants to deposit
-    const [finalETH, finalLIM] = await poolHelper.getAmountsForExact(
-        ethers.parseEther("0.15"), // ETH
-        0
-    );
-      
-    console.log("Exact amounts needed → ETH:", finalETH.toString(), "LIM:", finalLIM.toString());
+  // 1) Define the event filter for Transfer(0x0 → user)
+  const filter = positionManager.filters.Transfer(
+    ethers.ZeroAddress,
+    user.address
+  );
 
-    // 3a) Approve the ERC-20 itself so Permit2 can pull your LIM
-    await limToken.connect(user).approve(PERMIT2_ADDRESS, ethers.parseUnits("20000000000", 18));
-    //const erc20Allow = await limToken.allowance(user.address, PERMIT2_ADDRESS);
-    //console.log("🛠 ERC20 → Permit2 allowance:", erc20Allow.toString());    
+  // 2) Query only the current block for matching events
+  const events = await positionManager.queryFilter(
+    filter,
+    receipt.blockNumber,
+    receipt.blockNumber
+  );
 
-    // 3b) Approve Permit2
-    const expiration = Math.floor(Date.now()/1000) + 60*60*24*365; // one year from now
-    const MAX_ALLOW = (1n << 160n) - 1n; 
-    await permit2.approve(limToken.target, POSITION_MANAGER, MAX_ALLOW, expiration);
-  
-    // Optional: read it back
-    // const [amt, exp, nonce] = await permit2.allowance(user.address, limToken.target, POSITION_MANAGER);
-    // console.log(`✅ Permit2: ${amt.toString()} LIM approved until ${exp.toString()} (nonce ${nonce.toString()})`);
+  // 3) Pull out the last matching event (should be your mint)
+  if (events.length === 0) {
+    throw new Error("No mint Transfer event found");
+  }
+  const tokenId = events[events.length - 1].args.tokenId;
+  console.log("🆔 Minted Position tokenId =", tokenId.toString());
 
-    // 4) Build the PoolInput object expected by your helper
-    const poolInput = {
-      token0:     ethers.ZeroAddress,
-      token1:     limToken.target,
-      amount0:    finalETH,
-      amount1:    finalLIM,
-      fee:        300,
-      tickSpacing:60,
-      tickLower:  0,  // these are ignored by buildMintParamsForUser
-      tickUpper:  0
-    };
-  
-    // 5) Build the PoolInput and fetch the Uniswap call data
-    const [ actions, params ] = await poolHelper.connect(user).buildMintParamsForUser(poolInput);
-
-    // 6) Pack the inner encode for modifyLiquidities
-    const inner = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes","bytes[]"],
-        [ actions, params ]
-    );
-    const deadline = (await ethers.provider.getBlock("latest")).timestamp + 120;
-
-    // 7) Now call multicall, *not* modifyLiquidities directly
-    const callData = positionManager.interface.encodeFunctionData("modifyLiquidities", [ inner, deadline ]);
-    const tx = await positionManager.connect(user).multicall([ callData ], { value: finalETH });
-    const receipt = await tx.wait();
-    const gasUsed = receipt.gasUsed;
-    console.log(`✅ userMintPosition() completed, Gas Used in units: ${gasUsed}`);
-    
-    // 1) Define the event filter for Transfer(0x0 → user)
-    const filter = positionManager.filters.Transfer(
-      ethers.ZeroAddress,
-      user.address
-    );
-
-    // 2) Query only the current block for matching events
-    const events = await positionManager.queryFilter(
-      filter,
-      receipt.blockNumber,
-      receipt.blockNumber
-    );
-
-    // 3) Pull out the last matching event (should be your mint)
-    if (events.length === 0) {
-      throw new Error("No mint Transfer event found");
-    }
-    const tokenId = events[events.length - 1].args.tokenId;
-    console.log("🆔 Minted Position tokenId =", tokenId.toString());
-
-    // 4) Store it on-chain
-    await poolHelper.connect(user).storeTokenId(tokenId);
-    console.log("✅ userMintPosition(): token ID stored");
+  // 4) Store it on-chain
+  await poolHelper.connect(user).storeTokenId(tokenId);
+  console.log("✅ userMintPosition(): token ID stored");
+  console.log("─────────────────────────────────────────────────");
 }
 
 async function userIncreasesLiquidity(poolHelper, user) {
-    console.log("user address in userIncreasesLiquidity : ", user.address);
+  console.log("──────────── User Increases Liquidity ─────────────");
 
-    const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
-    const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, user);
+  const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
+  const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, user);
 
-    // 1) Define additional liquidity amounts
-    const [extraETH, extraLIM] = await poolHelper.getAmountsForExact(
-        ethers.parseEther("0.05"), // target ETH
-        0                          // set LIM to zero to indicate ETH-driven
-    );
+  // 1) Define additional liquidity amounts
+  const [extraETH, extraLIM] = await poolHelper.getAmountsForExact(
+      ethers.parseEther("0.05"), // target ETH
+      0                          // set LIM to zero to indicate ETH-driven
+  );
 
-    console.log(`extraETH ${extraETH}, extraLIM ${extraLIM}`);
+  console.log(`extraETH ${extraETH}, extraLIM ${extraLIM}`);
 
-    // 2) Approve LIM if using LIM (skip if only using ETH)
-    if (extraLIM > 0) {
-        await limToken.connect(user).approve(PERMIT2_ADDRESS, ethers.parseUnits("20000000000", 18));
-        const expiration = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365;
-        const MAX_ALLOW = (1n << 160n) - 1n;
-        await permit2.approve(limToken.target, POSITION_MANAGER, MAX_ALLOW, expiration);
-    }
+  // 2) Approve LIM if using LIM (skip if only using ETH)
+  if (extraLIM > 0) {
+      await limToken.connect(user).approve(PERMIT2_ADDRESS, ethers.parseUnits("20000000000", 18));
+      const expiration = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365;
+      const MAX_ALLOW = (1n << 160n) - 1n;
+      await permit2.approve(limToken.target, POSITION_MANAGER, MAX_ALLOW, expiration);
+  }
 
-    // 3) Build calldata via the helper
-    const [actions, params] = await poolHelper.connect(user)
-        .buildIncreaseLiquidityParamsForUser(
-            ethers.ZeroAddress,       // token0 (ETH)
-            limToken.target,          // token1 (LIM)
-            extraETH,                 // amount0 (ETH)
-            extraLIM                  // amount1 (LIM)
-        );
+  // 3) Build calldata via the helper
+  const [actions, params] = await poolHelper.connect(user)
+      .buildIncreaseLiquidityParamsForUser(
+          ethers.ZeroAddress,       // token0 (ETH)
+          limToken.target,          // token1 (LIM)
+          extraETH,                 // amount0 (ETH)
+          extraLIM                  // amount1 (LIM)
+      );
 
-    const inner = ethers.AbiCoder.defaultAbiCoder().encode(
-        ["bytes", "bytes[]"],
-        [actions, params]
-    );
-    const deadline = (await ethers.provider.getBlock("latest")).timestamp + 120;
+  const inner = ethers.AbiCoder.defaultAbiCoder().encode(
+      ["bytes", "bytes[]"],
+      [actions, params]
+  );
+  const deadline = (await ethers.provider.getBlock("latest")).timestamp + 120;
 
-    const callData = positionManager.interface.encodeFunctionData(
-        "modifyLiquidities",
-        [inner, deadline]
-    );
+  const callData = positionManager.interface.encodeFunctionData(
+      "modifyLiquidities",
+      [inner, deadline]
+  );
 
-    const tx = await positionManager.connect(user).multicall(
-        [callData],
-        { value: extraETH } // send ETH here
-    );
-    const receipt = await tx.wait();
-    const gasUsed = receipt.gasUsed;
-    console.log(`✅ userIncreasesLiquidity() completed, Gas Used in units: ${gasUsed}`);
+  const tx = await positionManager.connect(user).multicall(
+      [callData],
+      { value: extraETH } // send ETH here
+  );
+  const receipt = await tx.wait();
+  const gasUsed = receipt.gasUsed;
+  console.log(`✅ userIncreasesLiquidity() completed, Gas Used in units: ${gasUsed}`);
+  console.log("─────────────────────────────────────────────────");
 }
 
 async function userDecreasesLiquidity(poolHelper, user) {
-  console.log("💧 user address in userDecreasesLiquidity:", user.address);
+  console.log("──────────── User Decreases Liquidity ─────────────");
 
   const positionManager = new ethers.Contract(
       POSITION_MANAGER,
@@ -446,6 +462,50 @@ async function userDecreasesLiquidity(poolHelper, user) {
 
   console.log(`token0 received: ${bal0After - bal0Before}`);
   console.log(`token1 received: ${bal1After - bal1Before}`);
+  console.log("─────────────────────────────────────────────────");
+}
+
+async function userCollectsPositionFees(poolHelper, user) {
+  console.log("──────────── User Collects Fees ─────────────");
+  const positionManager = new ethers.Contract(
+    POSITION_MANAGER,
+    POSITION_MANAGER_ABI,
+    user
+  );
+
+  // 1) prepare calldata via your new helper
+  const [actions, params] = await poolHelper
+    .connect(user)
+    .buildCollectFeesParamsForUser(
+      ethers.ZeroAddress,  // token0 (ETH)
+      limToken.target      // token1 (LIM)
+    );
+
+  const inner = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["bytes", "bytes[]"],
+    [actions, params]
+  );
+  const block = await ethers.provider.getBlock("latest");
+  const deadline = block.timestamp + 120;
+
+  // 2) snapshot balances
+  const ethBefore = await ethers.provider.getBalance(user.address);
+  const limBefore = await limToken.balanceOf(user.address);
+
+  // 3) call modifyLiquidities (collect fees)
+  const tx = await positionManager
+    .connect(user)
+    .modifyLiquidities(inner, deadline, { value: 0 });
+  const receipt = await tx.wait();
+  console.log(`✅ userCollectsPositionFees() done, Gas Used: ${receipt.gasUsed}`);
+
+  // 4) measure deltas
+  const ethAfter = await ethers.provider.getBalance(user.address);
+  const limAfter = await limToken.balanceOf(user.address);
+
+  console.log("  ETH collected:", (ethAfter - ethBefore).toString());
+  console.log("  LIM collected:", (limAfter - limBefore).toString());
+  console.log("─────────────────────────────────────────────────");
 }
 
 async function testExactAmounts(poolHelper) {

@@ -287,6 +287,43 @@ contract V4PoolHelper is Ownable, AccessControl {
         );
     }
 
+    /// @notice Build calldata to collect all fees for the user’s position
+    function buildCollectFeesParamsForUser(address token0, address token1) external view returns (bytes memory actions, bytes[] memory params) {
+        uint256 tokenId = userTokenIds[msg.sender];
+        require(tokenId != 0, "No position");
+
+        // 1) DECREASE_LIQUIDITY with zero delta
+        // 2) TAKE_PAIR to collect everything
+        actions = abi.encodePacked(
+        uint8(Actions.DECREASE_LIQUIDITY),
+        uint8(Actions.TAKE_PAIR)
+        );
+
+        params = new bytes[](2);
+
+        // DECREASE_LIQUIDITY(tokenId, 0, 0, 0, hookData)
+        params[0] = abi.encode(
+        tokenId,
+        uint128(0),
+        uint128(0),
+        uint128(0),
+        // same hookData as in mint/increase
+        abi.encode(
+            CurrencyLibrary.fromId(uint160(token0)),
+            CurrencyLibrary.fromId(uint160(token1)),
+            token0 == address(0),
+            token1 == address(0)
+        )
+        );
+
+        // TAKE_PAIR(currency0, currency1, recipient)
+        params[1] = abi.encode(
+        CurrencyLibrary.fromId(uint160(token0)),
+        CurrencyLibrary.fromId(uint160(token1)),
+        msg.sender
+        );
+    }
+
     /// @notice  Preview token amounts for a given liquidity decrease using internal helper
     function previewAmountsForLiquidity(uint128 liquidityDelta)external view returns (uint256 amount0, uint256 amount1) {
         // 1) Ensure the position exists and pool is initialized

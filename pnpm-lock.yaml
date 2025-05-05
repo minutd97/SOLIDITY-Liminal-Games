@@ -17,12 +17,21 @@ importers:
       '@openzeppelin/contracts':
         specifier: ^5.1.0
         version: 5.2.0
-      '@uniswap/v3-core':
-        specifier: ^1.0.1
-        version: 1.0.1
+      '@uniswap/universal-router':
+        specifier: ^2.0.0
+        version: 2.0.0
       '@uniswap/v3-periphery':
         specifier: ^1.4.4
         version: 1.4.4
+      '@uniswap/v4-core':
+        specifier: ^1.0.1
+        version: 1.0.1
+      '@uniswap/v4-periphery':
+        specifier: ^1.0.1
+        version: 1.0.1
+      axios:
+        specifier: ^1.7.9
+        version: 1.7.9
       eth-crypto:
         specifier: ^2.7.0
         version: 2.7.0
@@ -511,6 +520,9 @@ packages:
   '@openzeppelin/contracts@4.9.3':
     resolution: {integrity: sha512-He3LieZ1pP2TNt5JbkPA4PNT9WC3gOTOlDcFGJW4Le4QKqwmiNJCRt44APfxMxvq7OugU/cqYuPcSBzOw38DAg==}
 
+  '@openzeppelin/contracts@5.0.2':
+    resolution: {integrity: sha512-ytPc6eLGcHHnapAZ9S+5qsdomhjo6QBHTDRRBFfTxXIpsicMhVPouPgmUPebZZZGX7vt9USA+Z+0M0dSVtSUEA==}
+
   '@openzeppelin/contracts@5.2.0':
     resolution: {integrity: sha512-bxjNie5z89W1Ea0NZLZluFh8PrFNn9DH8DQlujEok2yjsOlraUPKID5p1Wk3qdNbf6XkQ1Os2RvfiHrrXLHWKA==}
 
@@ -658,8 +670,16 @@ packages:
     resolution: {integrity: sha512-f6UIliwBbRsgVLxIaBANF6w09tYqc6Y/qXdsrbEmXHyFA7ILiKrIwRFXe1yOg8M3cksgVsO9N7yuL2DdCGQKBA==}
     engines: {node: '>=10'}
 
+  '@uniswap/universal-router@2.0.0':
+    resolution: {integrity: sha512-6V21kuf547hE1gLfLQ89gv41DMSJY1ZZKer/k7CBagNPJ0oDnUyme+qQPtdoWknyUgSKd1M6sDm/WpocjVmPlA==}
+    engines: {node: '>=14'}
+
   '@uniswap/v2-core@1.0.1':
     resolution: {integrity: sha512-MtybtkUPSyysqLY2U210NBDeCHX+ltHt3oADGdjqoThZaFRDKwM6k1Nb3F0A3hk5hwuQvytFWhrWHOEq6nVJ8Q==}
+    engines: {node: '>=10'}
+
+  '@uniswap/v3-core@1.0.0':
+    resolution: {integrity: sha512-kSC4djMGKMHj7sLMYVnn61k9nu+lHjMIxgg9CDQT+s2QYLoA56GbSK9Oxr+qJXzzygbkrmuY6cwgP6cW2JXPFA==}
     engines: {node: '>=10'}
 
   '@uniswap/v3-core@1.0.1':
@@ -669,6 +689,12 @@ packages:
   '@uniswap/v3-periphery@1.4.4':
     resolution: {integrity: sha512-S4+m+wh8HbWSO3DKk4LwUCPZJTpCugIsHrWR86m/OrUyvSqGDTXKFfc2sMuGXCZrD1ZqO3rhQsKgdWg3Hbb2Kw==}
     engines: {node: '>=10'}
+
+  '@uniswap/v4-core@1.0.1':
+    resolution: {integrity: sha512-+UITeH0s/EXJ698nKFoWX6ZW2dOnIDjhUI3AJ0Hg3v+w/Sy4JIDsgmsQSeNu1FAEc72xm4muKY6YuXu9bR2X4Q==}
+
+  '@uniswap/v4-periphery@1.0.1':
+    resolution: {integrity: sha512-/ZLz7mCLL0eTo1M0h/Lc180OYMmpUEGb0yfqZ79nsqVdZCFp0TLQstLZ/zC+ofF7SrMoeGb57p+T8hbe6MXwNw==}
 
   '@yarnpkg/lockfile@1.1.0':
     resolution: {integrity: sha512-GpSwvyXOcOOlV70vbnzjj4fW5xW/FdUF6nQEt1ENy7m4ZCczi1+/buVUPAqmGfqznsORNFzUMjctTIp8a9tuCQ==}
@@ -1683,6 +1709,7 @@ packages:
 
   lodash.isequal@4.5.0:
     resolution: {integrity: sha512-pDo3lu8Jhfjqls6GkMgpahsF9kCyayhgykjyLMNFTKWrpVdAQtYyB4muAMWozBB4ig/dtWAmsMxLEI8wuz+DYQ==}
+    deprecated: This package is deprecated. Use require('node:util').isDeepStrictEqual instead.
 
   lodash.startcase@4.4.0:
     resolution: {integrity: sha512-+WKqsK294HMSc2jEbNgpHpd0JfIBhp7rEV4aqXWqFr6AlXov+SlcgB1Fv01y2kGe3Gc8nMW7VA0SrGuSkRfIEg==}
@@ -3386,6 +3413,8 @@ snapshots:
 
   '@openzeppelin/contracts@4.9.3': {}
 
+  '@openzeppelin/contracts@5.0.2': {}
+
   '@openzeppelin/contracts@5.2.0': {}
 
   '@openzeppelin/upgrades-core@1.41.0':
@@ -3570,7 +3599,15 @@ snapshots:
 
   '@uniswap/lib@4.0.1-alpha': {}
 
+  '@uniswap/universal-router@2.0.0':
+    dependencies:
+      '@openzeppelin/contracts': 5.0.2
+      '@uniswap/v2-core': 1.0.1
+      '@uniswap/v3-core': 1.0.0
+
   '@uniswap/v2-core@1.0.1': {}
+
+  '@uniswap/v3-core@1.0.0': {}
 
   '@uniswap/v3-core@1.0.1': {}
 
@@ -3581,6 +3618,10 @@ snapshots:
       '@uniswap/v2-core': 1.0.1
       '@uniswap/v3-core': 1.0.1
       base64-sol: 1.0.1
+
+  '@uniswap/v4-core@1.0.1': {}
+
+  '@uniswap/v4-periphery@1.0.1': {}
 
   '@yarnpkg/lockfile@1.1.0': {}
 

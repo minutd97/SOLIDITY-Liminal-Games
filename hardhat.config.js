@@ -62,4 +62,9 @@ module.exports = {
   },
 
   tracing: true,
+
+  paths: {
+    sources: "./contracts",          // or wherever your contracts are
+    libraries: "./lib",        // makes lib/permit2 available
+  }
 };

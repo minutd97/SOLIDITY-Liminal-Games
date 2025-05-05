@@ -333,23 +333,20 @@ function buildBurnPositionParamsForUser(
     uint256 tokenId = userTokenIds[msg.sender];
     require(tokenId != 0, "No position to burn");
 
-    // Ensure ETH is always token0 if needed, or enforce sort if you're relying on order
-    Currency currency0 = CurrencyLibrary.fromId(uint160(token0));
-    Currency currency1 = CurrencyLibrary.fromId(uint160(token1));
+    // Wrap the raw token addresses into Uniswap Currency objects
+    Currency currency0 = Currency.wrap(token0);
+    Currency currency1 = Currency.wrap(token1);
 
-    // ✅ FIXED: SETTLE_PAIR comes BEFORE BURN_POSITION
+    // 1) BURN_POSITION → 2) TAKE_PAIR
     actions = abi.encodePacked(
-        uint8(Actions.SETTLE_PAIR),
-        uint8(Actions.BURN_POSITION)
+        uint8(Actions.BURN_POSITION),
+        uint8(Actions.TAKE_PAIR)
     );
 
     params = new bytes[](2);
 
-    // SETTLE_PAIR
-    params[0] = abi.encode(currency0, currency1);
-
-    // BURN_POSITION(tokenId, amount0Min, amount1Min, hookData)
-    params[1] = abi.encode(
+    // 1) Burn the position (this withdraws the funds into the PositionManager)
+    params[0] = abi.encode(
         tokenId,
         amount0Min,
         amount1Min,
@@ -360,6 +357,9 @@ function buildBurnPositionParamsForUser(
             token1 == address(0)
         )
     );
+
+    // 2) Take the withdrawn funds out of the PositionManager to the user
+    params[1] = abi.encode(currency0, currency1, msg.sender);
 }
 
     /// @notice  Preview token amounts for a given liquidity decrease using internal helper

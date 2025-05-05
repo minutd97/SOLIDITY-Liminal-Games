@@ -295,8 +295,8 @@ contract V4PoolHelper is Ownable, AccessControl {
         // 1) DECREASE_LIQUIDITY with zero delta
         // 2) TAKE_PAIR to collect everything
         actions = abi.encodePacked(
-        uint8(Actions.DECREASE_LIQUIDITY),
-        uint8(Actions.TAKE_PAIR)
+            uint8(Actions.DECREASE_LIQUIDITY),
+            uint8(Actions.TAKE_PAIR)
         );
 
         params = new bytes[](2);
@@ -323,6 +323,44 @@ contract V4PoolHelper is Ownable, AccessControl {
         msg.sender
         );
     }
+
+function buildBurnPositionParamsForUser(
+    address token0,
+    address token1,
+    uint128 amount0Min,
+    uint128 amount1Min
+) external view returns (bytes memory actions, bytes[] memory params) {
+    uint256 tokenId = userTokenIds[msg.sender];
+    require(tokenId != 0, "No position to burn");
+
+    // Ensure ETH is always token0 if needed, or enforce sort if you're relying on order
+    Currency currency0 = CurrencyLibrary.fromId(uint160(token0));
+    Currency currency1 = CurrencyLibrary.fromId(uint160(token1));
+
+    // ✅ FIXED: SETTLE_PAIR comes BEFORE BURN_POSITION
+    actions = abi.encodePacked(
+        uint8(Actions.SETTLE_PAIR),
+        uint8(Actions.BURN_POSITION)
+    );
+
+    params = new bytes[](2);
+
+    // SETTLE_PAIR
+    params[0] = abi.encode(currency0, currency1);
+
+    // BURN_POSITION(tokenId, amount0Min, amount1Min, hookData)
+    params[1] = abi.encode(
+        tokenId,
+        amount0Min,
+        amount1Min,
+        abi.encode(
+            currency0,
+            currency1,
+            token0 == address(0),
+            token1 == address(0)
+        )
+    );
+}
 
     /// @notice  Preview token amounts for a given liquidity decrease using internal helper
     function previewAmountsForLiquidity(uint128 liquidityDelta)external view returns (uint256 amount0, uint256 amount1) {

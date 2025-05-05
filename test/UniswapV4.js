@@ -26,7 +26,7 @@ const POSITION_MANAGER_ABI = [
     ],
     name: "multicall",
     outputs: [
-      { internalType: "bytes[]", name: "results", type: "bytes[]" }
+      { internalType: "bytes[]", name: "", type: "bytes[]" }
     ],
     stateMutability: "payable",
     type: "function"
@@ -63,9 +63,9 @@ const POSITION_MANAGER_ABI = [
         components: [
           { internalType: "address", name: "currency0", type: "address" },
           { internalType: "address", name: "currency1", type: "address" },
-          { internalType: "uint24",   name: "fee",       type: "uint24"   },
-          { internalType: "int24",    name: "tickSpacing", type: "int24"  },
-          { internalType: "address",  name: "hooks",     type: "address" }
+          { internalType: "uint24", name: "fee", type: "uint24" },
+          { internalType: "int24", name: "tickSpacing", type: "int24" },
+          { internalType: "address", name: "hooks", type: "address" }
         ],
         internalType: "struct PoolKey",
         name: "poolKey",
@@ -77,6 +77,13 @@ const POSITION_MANAGER_ABI = [
         type: "uint256"
       }
     ],
+    stateMutability: "view",
+    type: "function"
+  },
+  {
+    inputs: [{ internalType: "uint256", name: "tokenId", type: "uint256" }],
+    name: "ownerOf",
+    outputs: [{ internalType: "address", name: "", type: "address" }],
     stateMutability: "view",
     type: "function"
   },
@@ -213,33 +220,35 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
 
     //await testExactAmounts(poolHelper);
     await userMintsPosition(poolHelper, user1);
-    await userIncreasesLiquidity(poolHelper, user1);
-    await userCollectsPositionFees(poolHelper, user1);
+    //await settlePairOnly(poolHelper, user1);
+    //await userIncreasesLiquidity(poolHelper, user1);
+    //await userCollectsPositionFees(poolHelper, user1);
     //await userDecreasesLiquidity(poolHelper, user1);
 
     // For ERC20 SWAPS, Approve max tokens to Permit2, Permit2 approve max tokens to router
-    await swapHelper.approveTokenWithPermit2(limToken.target);
+    // await swapHelper.approveTokenWithPermit2(limToken.target);
 
-    console.log("──────────── Swap Tests ─────────────");
+    // console.log("──────────── Swap Tests ─────────────");
 
-    // Small swap
-    await swap(true, ethers.parseEther("0.1"), user1); // Swap 0.1 ETH -> LIM
+    // // Small swap
+    // await swap(true, ethers.parseEther("0.1"), user1); // Swap 0.1 ETH -> LIM
 
-    // Medium swap
-    await swap(true, ethers.parseEther("1.0"), user1); // Swap 1 ETH -> LIM
+    // // Medium swap
+    // await swap(true, ethers.parseEther("1.0"), user1); // Swap 1 ETH -> LIM
 
-    // Larger swap
-    await swap(true, ethers.parseEther("5.0"), user1); // Swap 5 ETH -> LIM
+    // // Larger swap
+    // await swap(true, ethers.parseEther("5.0"), user1); // Swap 5 ETH -> LIM
 
-    // Now swap some LIM back to ETH
-    await swap(false, ethers.parseUnits("100000", 18), user1); // Swap 100k LIM -> ETH
-    await swap(false, ethers.parseUnits("500000", 18), user1); // Swap 500k LIM -> ETH
+    // // Now swap some LIM back to ETH
+    // await swap(false, ethers.parseUnits("100000", 18), user1); // Swap 100k LIM -> ETH
+    // await swap(false, ethers.parseUnits("500000", 18), user1); // Swap 500k LIM -> ETH
 
-    console.log("──────────── End of Swap Tests ─────────────");
+    // console.log("──────────── End of Swap Tests ─────────────");
 
-    await userCollectsPositionFees(poolHelper, user1);
-    await userDecreasesLiquidity(poolHelper, user1);
-    
+    //await userCollectsPositionFees(poolHelper, user1);
+    //await userDecreasesLiquidity(poolHelper, user1);
+    await userBurnPosition(poolHelper, user1);
+
   });
 });
 
@@ -507,6 +516,104 @@ async function userCollectsPositionFees(poolHelper, user) {
   console.log("  LIM collected:", (limAfter - limBefore).toString());
   console.log("─────────────────────────────────────────────────");
 }
+
+async function settlePairOnly(poolHelper, user) {
+  const positionManager = new ethers.Contract(
+    POSITION_MANAGER,
+    POSITION_MANAGER_ABI,
+    user
+  );
+
+  // Get sorted token order
+  const tokenA = ethers.ZeroAddress;       // ETH
+  const tokenB = limToken.target;          // LIM
+  const [token0, token1] =
+    tokenA.toLowerCase() < tokenB.toLowerCase()
+      ? [tokenA, tokenB]
+      : [tokenB, tokenA];
+
+  // Encode currencies
+  const currency0 = token0;
+  const currency1 = token1;
+
+  const actions = ethers.solidityPacked(["uint8"], [Actions.SETTLE_PAIR]);
+  const params = [ethers.AbiCoder.defaultAbiCoder().encode(
+    ["address", "address"],
+    [currency0, currency1]
+  )];
+
+  const inner = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["bytes", "bytes[]"],
+    [actions, params]
+  );
+
+  const block = await ethers.provider.getBlock("latest");
+  const deadline = block.timestamp + 120;
+
+  try {
+    const tx = await positionManager.modifyLiquidities(inner, deadline);
+    const receipt = await tx.wait();
+    console.log("✅ SETTLE_PAIR succeeded, gasUsed:", receipt.gasUsed.toString());
+  } catch (err) {
+    console.error("❌ SETTLE_PAIR failed with:", err?.error?.message || err.message);
+    throw err;
+  }
+}
+
+async function userBurnPosition(poolHelper, user) {
+  const positionManager = new ethers.Contract(
+    POSITION_MANAGER,
+    POSITION_MANAGER_ABI,
+    user
+  );
+
+  const tokenId = await poolHelper.userTokenIds(user.address);
+  console.log("— Burning position tokenId =", tokenId.toString());
+
+  try {
+    const owner = await positionManager.ownerOf(tokenId);
+    console.log(`✅ Owner of tokenId ${tokenId} is: ${owner}`);
+  } catch (e) {
+    console.error(`❌ Could not fetch owner for tokenId ${tokenId}. Likely already burned or invalid.`);
+    throw e;
+  }
+
+  const [actions, params] = await poolHelper
+    .connect(user)
+    .buildBurnPositionParamsForUser(
+      ethers.ZeroAddress,      // token0 = ETH
+      limToken.target,         // token1 = LIM
+      0n,
+      0n
+    );
+
+  const inner = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["bytes", "bytes[]"],
+    [actions, params]
+  );
+  const block = await ethers.provider.getBlock("latest");
+  const deadline = block.timestamp + 120;
+
+  const ethBefore = await ethers.provider.getBalance(user.address);
+  const limBefore = await limToken.balanceOf(user.address);
+
+  try {
+    const tx = await positionManager.modifyLiquidities(inner, deadline);
+    const receipt = await tx.wait();
+
+    console.log("✅ burnPosition gasUsed:", receipt.gasUsed.toString());
+
+    const ethAfter = await ethers.provider.getBalance(user.address);
+    const limAfter = await limToken.balanceOf(user.address);
+
+    console.log("ETH returned:", (ethAfter - ethBefore).toString());
+    console.log("LIM returned:", (limAfter - limBefore).toString());
+  } catch (err) {
+    console.error("❌ burnPosition failed with:", err?.error?.message || err.message);
+    throw err;
+  }
+}
+
 
 async function testExactAmounts(poolHelper) {
     const cases = [

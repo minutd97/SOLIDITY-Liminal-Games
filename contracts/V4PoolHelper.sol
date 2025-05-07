@@ -324,43 +324,43 @@ contract V4PoolHelper is Ownable, AccessControl {
         );
     }
 
-function buildBurnPositionParamsForUser(
-    address token0,
-    address token1,
-    uint128 amount0Min,
-    uint128 amount1Min
-) external view returns (bytes memory actions, bytes[] memory params) {
-    uint256 tokenId = userTokenIds[msg.sender];
-    require(tokenId != 0, "No position to burn");
+    function buildBurnPositionParamsForUser(
+        address token0,
+        address token1,
+        uint128 amount0Min,
+        uint128 amount1Min
+    ) external view returns (bytes memory actions, bytes[] memory params) {
+        uint256 tokenId = userTokenIds[msg.sender];
+        require(tokenId != 0, "No position to burn");
 
-    // Wrap the raw token addresses into Uniswap Currency objects
-    Currency currency0 = Currency.wrap(token0);
-    Currency currency1 = Currency.wrap(token1);
+        // Wrap the raw token addresses into Uniswap Currency objects
+        Currency currency0 = Currency.wrap(token0);
+        Currency currency1 = Currency.wrap(token1);
 
-    // 1) BURN_POSITION → 2) TAKE_PAIR
-    actions = abi.encodePacked(
-        uint8(Actions.BURN_POSITION),
-        uint8(Actions.TAKE_PAIR)
-    );
+        // 1) BURN_POSITION → 2) TAKE_PAIR
+        actions = abi.encodePacked(
+            uint8(Actions.BURN_POSITION),
+            uint8(Actions.TAKE_PAIR)
+        );
 
-    params = new bytes[](2);
+        params = new bytes[](2);
 
-    // 1) Burn the position (this withdraws the funds into the PositionManager)
-    params[0] = abi.encode(
-        tokenId,
-        amount0Min,
-        amount1Min,
-        abi.encode(
-            currency0,
-            currency1,
-            token0 == address(0),
-            token1 == address(0)
-        )
-    );
+        // 1) Burn the position (this withdraws the funds into the PositionManager)
+        params[0] = abi.encode(
+            tokenId,
+            amount0Min,
+            amount1Min,
+            abi.encode(
+                currency0,
+                currency1,
+                token0 == address(0),
+                token1 == address(0)
+            )
+        );
 
-    // 2) Take the withdrawn funds out of the PositionManager to the user
-    params[1] = abi.encode(currency0, currency1, msg.sender);
-}
+        // 2) Take the withdrawn funds out of the PositionManager to the user
+        params[1] = abi.encode(currency0, currency1, msg.sender);
+    }
 
     /// @notice  Preview token amounts for a given liquidity decrease using internal helper
     function previewAmountsForLiquidity(uint128 liquidityDelta)external view returns (uint256 amount0, uint256 amount1) {

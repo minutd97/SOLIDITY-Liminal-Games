@@ -131,7 +131,7 @@ const PERMIT2_ABI = [
     }
 ];
   
-let limToken, swapHelper;
+let limToken, swapHelper, hookAddress;
 
 describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and more", function () {
   async function deployFixture() {
@@ -142,14 +142,25 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
     limToken = await LiminalToken.deploy();
     await limToken.waitForDeployment();
 
-    // Deploy V4 Hook Contract
-    const Hook = await ethers.getContractFactory("V4Hook");
-    const hook = await Hook.deploy(POOL_MANAGER);
-    await hook.waitForDeployment();
+    // Deploy V4HookFactory
+    const HookFactory = await ethers.getContractFactory("V4HookFactory");
+    const hookFactory = await HookFactory.deploy();
+    await hookFactory.waitForDeployment();
+
+    const { salt, predicted, fullBytecode } = await findMatchingHookAddress(hookFactory.target, POOL_MANAGER);
+
+    console.log("V4HookFactory @", hookFactory.target);
+    console.log("Will deploy V4Hook ↦", predicted, "with salt", salt);
+    
+    // CREATE V4 Hook Contract
+    const tx = await hookFactory.create(fullBytecode, salt);
+    await tx.wait();
+    console.log("✅ V4Hook deployed correctly:", predicted);
+    hookAddress = predicted;
 
     // Deploy PoolHelper
     const PoolHelper = await ethers.getContractFactory("V4PoolHelper");
-    const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, hook.target);
+    const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted);
     await poolHelper.waitForDeployment();
 
     // DEV ONLY!!!!!!!!!!!!!!!!!!!!!!
@@ -178,7 +189,7 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
     await log_TokenBalance(limToken, "LIM", user1.address, "user1");
     console.log("user 1 address : ", user1.address);
 
-    return { owner, user1, user2, presale, poolHelper};
+    return { owner, user1, user2, presale, poolHelper, hookAddress};
   }
 
 it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap + V4 Liquidity Providing", async function () {
@@ -255,6 +266,31 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
   });
 });
 
+async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {
+  const factory = await ethers.getContractFactory("V4Hook");
+
+  // build init code with the pool manager arg
+  const encodedArgs  = ethers.AbiCoder.defaultAbiCoder().encode(["address"], [poolManagerAddress]);
+  const fullBytecode = factory.bytecode + encodedArgs.slice(2);
+  const bytecodeHash = ethers.keccak256(fullBytecode);
+
+  // <-- corrected mask includes the 1<<6 bit for afterSwap
+  const expectedBits = BigInt((1<<12)|(1<<10)|(1<<8)|(1<<6)); // 0x1540n
+
+  for (let salt = 0; salt < 1_000_000; salt++) {
+    const saltHex   = ethers.toBeHex(salt, 32);
+    const predicted = ethers.getCreate2Address(
+      factoryAddress,  // <<< use the on-chain factory's address here
+      saltHex,
+      bytecodeHash
+    );
+    if ((BigInt(predicted) & 0x3FFFn) === expectedBits) {
+      return { salt, predicted, fullBytecode };
+    }
+  }
+  throw new Error("No matching address found");
+}
+
 // _zeroForOne = true for ETH -> LIM, false for LIM -> ETH
 async function swap(_zeroForOne, _amountIn, _user) {
     const poolKey = {
@@ -262,7 +298,7 @@ async function swap(_zeroForOne, _amountIn, _user) {
         currency1: limToken.target,
         fee: 300,
         tickSpacing: 60,
-        hooks: ethers.ZeroAddress
+        hooks: hookAddress
     };
   
     if(_zeroForOne == false){

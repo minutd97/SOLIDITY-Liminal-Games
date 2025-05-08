@@ -35,6 +35,7 @@ contract V4PoolHelper is Ownable, AccessControl {
     IPoolManager public immutable poolManager;
     IPositionManager public immutable positionManager;
     IAllowanceTransfer public immutable permit2;
+    address public immutable hookAddress;
 
     uint256 private constant Q96 = 2**96;
     uint160 public poolSqrtPriceX96;
@@ -43,11 +44,12 @@ contract V4PoolHelper is Ownable, AccessControl {
 
     mapping(address => uint256) public userTokenIds;
 
-    constructor(address _poolManager, address _positionManager, address _permit2) Ownable(msg.sender) {
+    constructor(address _poolManager, address _positionManager, address _permit2, address _hookAddress) Ownable(msg.sender) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         poolManager = IPoolManager(_poolManager);
         positionManager = IPositionManager(_positionManager);
         permit2 = IAllowanceTransfer(_permit2);
+        hookAddress = _hookAddress;
     }
 
     function createPoolAndAddLiquidity(PoolInput calldata _input) external payable onlyRole(POOL_CREATOR) {
@@ -75,7 +77,7 @@ contract V4PoolHelper is Ownable, AccessControl {
             currency1: currency1,
             fee: input.fee,
             tickSpacing: input.tickSpacing,
-            hooks: IHooks(address(0))
+            hooks: IHooks(hookAddress)
         });
 
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
@@ -157,7 +159,7 @@ contract V4PoolHelper is Ownable, AccessControl {
             currency1: CurrencyLibrary.fromId(uint160(token1)),
             fee: input.fee,
             tickSpacing: input.tickSpacing,
-            hooks: IHooks(address(0))
+            hooks: IHooks(hookAddress)
         });
 
         uint160 sqrtPriceX96 = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);

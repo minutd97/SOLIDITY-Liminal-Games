@@ -14,6 +14,9 @@ import { StateLibrary }             from "@uniswap/v4-core/src/libraries/StateLi
 import { BaseHook }                 from "@uniswap/v4-periphery/src/utils/BaseHook.sol";
 import { Hooks }                    from "@uniswap/v4-core/src/libraries/Hooks.sol";
 
+/// @dev Only include this during Hardhat testing
+import "hardhat/console.sol";
+
 contract V4Hook is BaseHook {
     using PoolIdLibrary for PoolKey;
     using StateLibrary  for IPoolManager;
@@ -23,7 +26,6 @@ contract V4Hook is BaseHook {
 
     constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
 
-    /// @inheritdoc BaseHook
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize:      false,
@@ -36,7 +38,6 @@ contract V4Hook is BaseHook {
             afterSwap:             true,
             beforeDonate:          false,
             afterDonate:           false,
-            // return‐delta hooks are not used here
             beforeSwapReturnDelta:         false,
             afterSwapReturnDelta:          false,
             afterAddLiquidityReturnDelta:  false,
@@ -51,6 +52,7 @@ contract V4Hook is BaseHook {
         int24   /*tick*/       // initial tick
     ) internal override returns (bytes4) {
         latestSqrtPriceX96[key.toId()] = sqrtPriceX96;
+        console.log("Init hook");
         return BaseHook.afterInitialize.selector;
     }
 
@@ -63,6 +65,7 @@ contract V4Hook is BaseHook {
         bytes calldata                                // hookData
     ) internal override returns (bytes4, BalanceDelta) {
         // read on‐chain price from transient storage
+        console.log("Add liquidity hook");
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
         latestSqrtPriceX96[key.toId()] = sqrtPriceX96;
         // return no adjustment to original delta
@@ -77,6 +80,7 @@ contract V4Hook is BaseHook {
         BalanceDelta /*feesAccrued*/,                 // returned fees
         bytes calldata                                // hookData
     ) internal override returns (bytes4, BalanceDelta) {
+        console.log("Remove liquidity hook");
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
         latestSqrtPriceX96[key.toId()] = sqrtPriceX96;
         return (BaseHook.afterRemoveLiquidity.selector, BalanceDelta.wrap(0));
@@ -89,6 +93,7 @@ contract V4Hook is BaseHook {
         BalanceDelta /*delta*/,         // returned deltas
         bytes calldata                  // hookData
     ) internal override returns (bytes4, int128) {
+        console.log("Swap hook");
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
         latestSqrtPriceX96[key.toId()] = sqrtPriceX96;
         // no custom adjustment to swap delta

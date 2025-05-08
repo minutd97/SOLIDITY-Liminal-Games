@@ -142,9 +142,14 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
     limToken = await LiminalToken.deploy();
     await limToken.waitForDeployment();
 
+    // Deploy V4 Hook Contract
+    const Hook = await ethers.getContractFactory("V4Hook");
+    const hook = await Hook.deploy(POOL_MANAGER);
+    await hook.waitForDeployment();
+
     // Deploy PoolHelper
     const PoolHelper = await ethers.getContractFactory("V4PoolHelper");
-    const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS);
+    const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, hook.target);
     await poolHelper.waitForDeployment();
 
     // DEV ONLY!!!!!!!!!!!!!!!!!!!!!!

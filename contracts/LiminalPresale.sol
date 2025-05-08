@@ -155,7 +155,7 @@ contract LiminalPresale is Ownable {
             token1: address(limToken),
             amount0: totalContributions,
             amount1: totalPoolTokens,
-            fee: 300,
+            fee: 5000,
             tickSpacing: 60,
             tickLower: 0,
             tickUpper: 0

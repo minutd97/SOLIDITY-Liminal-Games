@@ -296,7 +296,7 @@ async function swap(_zeroForOne, _amountIn, _user) {
     const poolKey = {
         currency0: ethers.ZeroAddress,
         currency1: limToken.target,
-        fee: 300,
+        fee: 5000,
         tickSpacing: 60,
         hooks: hookAddress
     };
@@ -350,7 +350,7 @@ async function userMintsPosition(poolHelper, user) {
     token1:     limToken.target,
     amount0:    finalETH,
     amount1:    finalLIM,
-    fee:        300,
+    fee:        5000,
     tickSpacing:60,
     tickLower:  0,  // these are ignored by buildMintParamsForUser
     tickUpper:  0

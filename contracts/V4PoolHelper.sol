@@ -15,6 +15,11 @@ import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IAllowanceTransfer} from "@uniswap/v4-periphery/lib/permit2/src/interfaces/IAllowanceTransfer.sol";
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {PoolId, PoolIdLibrary}    from "@uniswap/v4-core/src/types/PoolId.sol";
+
+interface IV4Hook {
+  function latestSqrtPriceX96(PoolId poolId) external view returns (uint160);
+}
 
 struct PoolInput {
     address token0;
@@ -37,8 +42,8 @@ contract V4PoolHelper is Ownable, AccessControl {
     IAllowanceTransfer public immutable permit2;
     address public immutable hookAddress;
 
+    PoolKey public poolKey;
     uint256 private constant Q96 = 2**96;
-    uint160 public poolSqrtPriceX96;
     int24 public standardTickLower;
     int24 public standardTickUpper;
 
@@ -54,7 +59,6 @@ contract V4PoolHelper is Ownable, AccessControl {
 
     function createPoolAndAddLiquidity(PoolInput calldata _input) external payable onlyRole(POOL_CREATOR) {
         (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) = calculateTicks(_input);
-        poolSqrtPriceX96 = sqrtPriceX96;
         standardTickLower = tickLower;
         standardTickUpper = tickUpper;
 
@@ -72,7 +76,7 @@ contract V4PoolHelper is Ownable, AccessControl {
         Currency currency0 = CurrencyLibrary.fromId(uint160(input.token0));
         Currency currency1 = CurrencyLibrary.fromId(uint160(input.token1));
 
-        PoolKey memory pool = PoolKey({
+        poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
             fee: input.fee,
@@ -89,8 +93,8 @@ contract V4PoolHelper is Ownable, AccessControl {
         );
 
         bytes memory actions = abi.encodePacked(uint8(Actions.MINT_POSITION), uint8(Actions.SETTLE_PAIR));
-        bytes[] memory mintParams = buildMintParams(pool, input, liquidity);
-        bytes[] memory params = buildPositionParams(pool, actions, mintParams, sqrtPriceX96);
+        bytes[] memory mintParams = buildMintParams(poolKey, input, liquidity);
+        bytes[] memory params = buildPositionParams(poolKey, actions, mintParams, sqrtPriceX96);
 
         positionManager.multicall{value: msg.value}(params);
     }
@@ -150,26 +154,14 @@ contract V4PoolHelper is Ownable, AccessControl {
         require(userTokenIds[msg.sender] == 0, "Already minted");
         require(standardTickLower < standardTickUpper, "Pool not initialized");
 
-        // No sorting needed, we trust ETH is always token0
-        address token0 = input.token0;
-        address token1 = input.token1;
-
-        PoolKey memory poolKey = PoolKey({
-            currency0: CurrencyLibrary.fromId(uint160(token0)),
-            currency1: CurrencyLibrary.fromId(uint160(token1)),
-            fee: input.fee,
-            tickSpacing: input.tickSpacing,
-            hooks: IHooks(hookAddress)
-        });
-
-        uint160 sqrtPriceX96 = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);
+        uint160 sqrtPriceX96 = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             TickMath.getSqrtPriceAtTick(standardTickLower),
             TickMath.getSqrtPriceAtTick(standardTickUpper),
             input.amount0,
             input.amount1
-        );
+        ); //
         require(liquidity > 0, "No liquidity");
 
         // Build actions
@@ -192,8 +184,8 @@ contract V4PoolHelper is Ownable, AccessControl {
             abi.encode(
                 poolKey.currency0,
                 poolKey.currency1,
-                token0 == address(0),
-                token1 == address(0)
+                true,
+                false
             )
         );
 
@@ -208,7 +200,7 @@ contract V4PoolHelper is Ownable, AccessControl {
 
         // 1) Compute how much liquidity that amount buys at current price
         uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmounts(
-            poolSqrtPriceX96,
+            IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId()),
             TickMath.getSqrtPriceAtTick(standardTickLower),
             TickMath.getSqrtPriceAtTick(standardTickUpper),
             amount0Desired,
@@ -372,7 +364,7 @@ contract V4PoolHelper is Ownable, AccessControl {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
 
         // 2) Load current price and tick boundaries
-        uint160 sqrtP = poolSqrtPriceX96;
+        uint160 sqrtP = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
         uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
         uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
 
@@ -394,7 +386,7 @@ contract V4PoolHelper is Ownable, AccessControl {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
         require((exact0 == 0) != (exact1 == 0), "Specify exactly one exact amount");
 
-        uint160 sqrtP = poolSqrtPriceX96;
+        uint160 sqrtP = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
         uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
         uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
 
@@ -454,23 +446,6 @@ contract V4PoolHelper is Ownable, AccessControl {
         }
     }
 
-    function storeTokenId(uint256 tokenId) external {
-        require(userTokenIds[msg.sender] == 0, "Already stored");
-        userTokenIds[msg.sender] = tokenId;
-    }
-
-    function setupPermit2Approvals(address token0, address token1) external onlyRole(POOL_CREATOR) {
-        if (token0 != address(0)) {
-            IERC20(token0).approve(address(permit2), type(uint256).max);
-            permit2.approve(token0, address(positionManager), type(uint160).max, type(uint48).max);
-        }
-
-        if (token1 != address(0)) {
-            IERC20(token1).approve(address(permit2), type(uint256).max);
-            permit2.approve(token1, address(positionManager), type(uint160).max, type(uint48).max);
-        }
-    }
-
     function getSqrtPriceX96FromAmounts(uint256 token0Amount, uint256 token1Amount) public pure returns (uint160) {
         require(token0Amount > 0 && token1Amount > 0, "Amounts must be > 0");
 
@@ -520,6 +495,23 @@ contract V4PoolHelper is Ownable, AccessControl {
         result = (result + x / result) >> 1;
         uint256 r1 = x / result;
         return (result < r1 ? result : r1);
+    }
+
+    function storeTokenId(uint256 tokenId) external {
+        require(userTokenIds[msg.sender] == 0, "Already stored");
+        userTokenIds[msg.sender] = tokenId;
+    }
+
+    function setupPermit2Approvals(address token0, address token1) external onlyRole(POOL_CREATOR) {
+        if (token0 != address(0)) {
+            IERC20(token0).approve(address(permit2), type(uint256).max);
+            permit2.approve(token0, address(positionManager), type(uint160).max, type(uint48).max);
+        }
+
+        if (token1 != address(0)) {
+            IERC20(token1).approve(address(permit2), type(uint256).max);
+            permit2.approve(token1, address(positionManager), type(uint160).max, type(uint48).max);
+        }
     }
 
     function grantCreatorRole(address account) public onlyOwner {

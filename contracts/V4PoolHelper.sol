@@ -16,6 +16,7 @@ import {IAllowanceTransfer} from "@uniswap/v4-periphery/lib/permit2/src/interfac
 import {LiquidityAmounts} from "@uniswap/v4-periphery/src/libraries/LiquidityAmounts.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {PoolId, PoolIdLibrary}    from "@uniswap/v4-core/src/types/PoolId.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 interface IV4Hook {
   function latestSqrtPriceX96(PoolId poolId) external view returns (uint160);
@@ -32,7 +33,7 @@ struct PoolInput {
     int24 tickUpper;
 }
 
-contract V4PoolHelper is Ownable, AccessControl {
+contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     using CurrencyLibrary for Currency;
 
     bytes32 public constant POOL_CREATOR = keccak256("POOL_CREATOR");
@@ -482,5 +483,10 @@ contract V4PoolHelper is Ownable, AccessControl {
 
     function revokeCreatorRole(address account) public onlyOwner {
         revokeRole(POOL_CREATOR, account);
+    }
+
+    /// @dev Accept ERC721 (PositionManager) transfers
+    function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data) external pure override returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
     }
 }

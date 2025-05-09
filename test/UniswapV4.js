@@ -142,6 +142,7 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
     const LiminalToken = await ethers.getContractFactory("LiminalToken");
     limToken = await LiminalToken.deploy();
     await limToken.waitForDeployment();
+    console.log(`LiminalToken : ${limToken.target}`);
 
     // Deploy V4HookFactory
     const HookFactory = await ethers.getContractFactory("V4HookFactory");
@@ -150,30 +151,33 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
 
     const { salt, predicted, fullBytecode } = await findMatchingHookAddress(hookFactory.target, POOL_MANAGER);
 
-    console.log("V4HookFactory @", hookFactory.target);
-    console.log("Will deploy V4Hook ↦", predicted, "with salt", salt);
+    console.log("V4HookFactory : ", hookFactory.target);
+    //console.log("Will deploy V4Hook ↦", predicted, "with salt", salt);
     
     // CREATE V4 Hook Contract
     const tx = await hookFactory.create(fullBytecode, salt);
     await tx.wait();
-    console.log("✅ V4Hook deployed correctly:", predicted);
+    console.log("V4Hook deployed correctly : ", predicted);
     hookAddress = predicted;
 
     // Deploy PoolHelper
     const PoolHelper = await ethers.getContractFactory("V4PoolHelper");
     const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted);
     await poolHelper.waitForDeployment();
+    console.log(`V4PoolHelper : ${poolHelper.target}`);
 
     // DEV ONLY!!!!!!!!!!!!!!!!!!!!!!
     // Deploy SwapHelper
     const SwapHelper = await ethers.getContractFactory("V4SwapHelper");
     swapHelper = await SwapHelper.deploy(UNIVERSAL_ROUTER, POOL_MANAGER, PERMIT2_ADDRESS);
     await swapHelper.waitForDeployment();
+    console.log(`V4SwapHelper : ${swapHelper.target}`);
 
     // Deploy LiminalPresale
     const LiminalPresale = await ethers.getContractFactory("LiminalPresale");
     const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target);
     await presale.waitForDeployment();
+    console.log(`LiminalPresale : ${presale.target}`);
 
     // Let the presale contract be the pool creator
     await poolHelper.grantCreatorRole(presale.target);
@@ -195,6 +199,8 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
 
 it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap + V4 Liquidity Providing", async function () {
     const { owner, presale, user1, poolHelper} = await loadFixture(deployFixture);
+    const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, owner);
+    
     await presale.startPresale(3600); // 1-hour presale
 
     const ethValue = ethers.parseEther("0.5");
@@ -227,7 +233,13 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     const totalPresaleTokens = await presale.totalPresaleTokens();
     expect(totalPresaleTokens).to.equal(0);
 
-    await presale.createUniswapV4Pool();
+    const tx = await presale.createUniswapV4Pool();
+    const receipt = await tx.wait();
+    const ownerTokenId = await returnTokenId(positionManager, poolHelper.target, receipt);
+    
+    await presale.connect(owner).transferPositionToHelper(POSITION_MANAGER, poolHelper.target, ownerTokenId);
+    const ownerTokenAddress = await positionManager.ownerOf(ownerTokenId);
+    console.log(`Owner token id : ${ownerTokenId}, address : ${ownerTokenAddress}`);
     
     const totalPoolTokens = await presale.totalPoolTokens();
     expect(totalPoolTokens).to.equal(0);
@@ -266,31 +278,6 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     await userBurnPosition(poolHelper, user1);
   });
 });
-
-async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {
-  const factory = await ethers.getContractFactory("V4Hook");
-
-  // build init code with the pool manager arg
-  const encodedArgs  = ethers.AbiCoder.defaultAbiCoder().encode(["address"], [poolManagerAddress]);
-  const fullBytecode = factory.bytecode + encodedArgs.slice(2);
-  const bytecodeHash = ethers.keccak256(fullBytecode);
-
-  // <-- corrected mask includes the 1<<6 bit for afterSwap
-  const expectedBits = BigInt((1<<12)|(1<<10)|(1<<8)|(1<<6)); // 0x1540n
-
-  for (let salt = 0; salt < 1_000_000; salt++) {
-    const saltHex   = ethers.toBeHex(salt, 32);
-    const predicted = ethers.getCreate2Address(
-      factoryAddress,  // <<< use the on-chain factory's address here
-      saltHex,
-      bytecodeHash
-    );
-    if ((BigInt(predicted) & 0x3FFFn) === expectedBits) {
-      return { salt, predicted, fullBytecode };
-    }
-  }
-  throw new Error("No matching address found");
-}
 
 // _zeroForOne = true for ETH -> LIM, false for LIM -> ETH
 async function swap(_zeroForOne, _amountIn, _user) {
@@ -374,24 +361,7 @@ async function userMintsPosition(poolHelper, user) {
   const gasUsed = receipt.gasUsed;
   console.log(`✅ userMintPosition() completed, Gas Used in units: ${gasUsed}`);
   
-  // 1) Define the event filter for Transfer(0x0 → user)
-  const filter = positionManager.filters.Transfer(
-    ethers.ZeroAddress,
-    user.address
-  );
-
-  // 2) Query only the current block for matching events
-  const events = await positionManager.queryFilter(
-    filter,
-    receipt.blockNumber,
-    receipt.blockNumber
-  );
-
-  // 3) Pull out the last matching event (should be your mint)
-  if (events.length === 0) {
-    throw new Error("No mint Transfer event found");
-  }
-  tokenId = events[events.length - 1].args.tokenId;
+  tokenId = await returnTokenId(positionManager, user, receipt);
   console.log("🆔 Minted Position tokenId =", tokenId.toString());
 }
 
@@ -607,6 +577,53 @@ async function userBurnPosition(poolHelper, user) {
     console.error("❌ burnPosition failed with:", err?.error?.message || err.message);
     throw err;
   }
+}
+
+async function returnTokenId(positionManager, user, receipt) {
+  // 1) Define the event filter for Transfer(0x0 → user)
+  const filter = positionManager.filters.Transfer(
+    ethers.ZeroAddress,
+    user.address
+  );
+
+  // 2) Query only the current block for matching events
+  const events = await positionManager.queryFilter(
+    filter,
+    receipt.blockNumber,
+    receipt.blockNumber
+  );
+
+  // 3) Pull out the last matching event (should be your mint)
+  if (events.length === 0) {
+    throw new Error("No mint Transfer event found");
+  }
+  var id = events[events.length - 1].args.tokenId;
+  return id;
+}
+
+async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {
+  const factory = await ethers.getContractFactory("V4Hook");
+
+  // build init code with the pool manager arg
+  const encodedArgs  = ethers.AbiCoder.defaultAbiCoder().encode(["address"], [poolManagerAddress]);
+  const fullBytecode = factory.bytecode + encodedArgs.slice(2);
+  const bytecodeHash = ethers.keccak256(fullBytecode);
+
+  // <-- corrected mask includes the 1<<6 bit for afterSwap
+  const expectedBits = BigInt((1<<12)|(1<<10)|(1<<8)|(1<<6)); // 0x1540n
+
+  for (let salt = 0; salt < 1_000_000; salt++) {
+    const saltHex   = ethers.toBeHex(salt, 32);
+    const predicted = ethers.getCreate2Address(
+      factoryAddress,  // <<< use the on-chain factory's address here
+      saltHex,
+      bytecodeHash
+    );
+    if ((BigInt(predicted) & 0x3FFFn) === expectedBits) {
+      return { salt, predicted, fullBytecode };
+    }
+  }
+  throw new Error("No matching address found");
 }
 
 async function testExactAmounts(poolHelper) {

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "./LiminalToken.sol";
 
 struct PoolInput {
@@ -191,6 +192,11 @@ contract LiminalPresale is Ownable {
         limToken.transferFrom(msg.sender, address(this), amount);
         totalPresaleTokens += amount;
         emit PresaleTokensDeposited(amount);
+    }
+
+    /// @notice Transfers a Uniswap V4 position NFT from this contract to the given pool helper contract.
+    function transferPositionToHelper(address positionManager, address poolHelper, uint256 tokenId) external onlyOwner {
+        IERC721(positionManager).safeTransferFrom(address(this), poolHelper, tokenId);
     }
 
     /// @notice Checks whether the minimum ETH cap has been reached

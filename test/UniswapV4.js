@@ -236,7 +236,7 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     const tx = await presale.createUniswapV4Pool();
     const receipt = await tx.wait();
     const ownerTokenId = await returnTokenId(positionManager, poolHelper.target, receipt);
-    
+
     await presale.connect(owner).transferPositionToHelper(POSITION_MANAGER, poolHelper.target, ownerTokenId);
     const ownerTokenAddress = await positionManager.ownerOf(ownerTokenId);
     console.log(`Owner token id : ${ownerTokenId}, address : ${ownerTokenAddress}`);
@@ -272,12 +272,32 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     await swap(false, ethers.parseUnits("500000", 18), user1); // Swap 500k LIM -> ETH
 
     console.log("──────────── End of Swap Tests ─────────────");
-
+    
+    await ownerCollectsPositionFees(poolHelper, owner, ownerTokenId);
     await userCollectsPositionFees(poolHelper, user1);
     await userDecreasesLiquidity(poolHelper, user1);
     await userBurnPosition(poolHelper, user1);
   });
 });
+
+async function ownerCollectsPositionFees(poolHelper, ownerAddress, ownerTokenId) {
+  console.log("──────────── Owner Collects Fees ─────────────");
+  // Get balances before
+  const ethBefore = await ethers.provider.getBalance(ownerAddress);
+  const limBefore = await limToken.balanceOf(ownerAddress);
+
+  // Call the fee collection
+  await poolHelper.collectPositionFees(ethers.ZeroAddress, limToken.target, ownerTokenId);
+
+  // Get balances after
+  const ethAfter = await ethers.provider.getBalance(ownerAddress);
+  const limAfter = await limToken.balanceOf(ownerAddress);
+
+  // Print deltas
+  console.log("💰 ETH collected:", ethAfter - ethBefore);
+  console.log("🪙 LIM collected:", limAfter - limBefore);
+  console.log("─────────────────────────────────────────────────");
+}
 
 // _zeroForOne = true for ETH -> LIM, false for LIM -> ETH
 async function swap(_zeroForOne, _amountIn, _user) {

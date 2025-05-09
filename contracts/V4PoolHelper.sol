@@ -98,6 +98,19 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         positionManager.multicall{value: msg.value}(params);
     }
 
+    /// @notice Collects all fees from a given Uniswap V4 position and sends them to the owner.
+    function collectPositionFees(address token0, address token1, uint256 tokenId) external onlyOwner {
+        // Reuse existing helper to construct calldata
+        (bytes memory actions, bytes[] memory params) = buildCollectFeesParamsForUser(token0, token1, tokenId);
+
+        // Wrap into final call for PositionManager
+        bytes memory inner = abi.encode(actions, params);
+        uint256 deadline = block.timestamp + 120;
+
+        // Execute modifyLiquidities to collect fees
+        positionManager.modifyLiquidities(inner, deadline);
+    }
+
     function calculateTicks(PoolInput memory input) internal pure returns (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) {
         int24 tickSpacing = input.tickSpacing;
 
@@ -268,7 +281,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     }
 
     /// @notice Build calldata to collect all fees for the user’s position
-    function buildCollectFeesParamsForUser(address token0, address token1, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
+    function buildCollectFeesParamsForUser(address token0, address token1, uint256 tokenId) public view returns (bytes memory actions, bytes[] memory params) {
         // 1) DECREASE_LIQUIDITY with zero delta
         // 2) TAKE_PAIR to collect everything
         actions = abi.encodePacked(
@@ -280,24 +293,24 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
 
         // DECREASE_LIQUIDITY(tokenId, 0, 0, 0, hookData)
         params[0] = abi.encode(
-        tokenId,
-        uint128(0),
-        uint128(0),
-        uint128(0),
-        // same hookData as in mint/increase
-        abi.encode(
-            CurrencyLibrary.fromId(uint160(token0)),
-            CurrencyLibrary.fromId(uint160(token1)),
-            token0 == address(0),
-            token1 == address(0)
-        )
+            tokenId,
+            uint128(0),
+            uint128(0),
+            uint128(0),
+            // same hookData as in mint/increase
+            abi.encode(
+                CurrencyLibrary.fromId(uint160(token0)),
+                CurrencyLibrary.fromId(uint160(token1)),
+                token0 == address(0),
+                token1 == address(0)
+            )
         );
 
         // TAKE_PAIR(currency0, currency1, recipient)
         params[1] = abi.encode(
-        CurrencyLibrary.fromId(uint160(token0)),
-        CurrencyLibrary.fromId(uint160(token1)),
-        msg.sender
+            CurrencyLibrary.fromId(uint160(token0)),
+            CurrencyLibrary.fromId(uint160(token1)),
+            msg.sender
         );
     }
 

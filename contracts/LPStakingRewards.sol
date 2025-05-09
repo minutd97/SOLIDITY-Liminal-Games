@@ -16,6 +16,7 @@ contract LPStakingRewards is IERC721Receiver {
 
     uint256 public constant WEEK = 7 days;
     uint256 public constant DECAY_PERIOD = 4 weeks;
+    uint256 public constant EARLY_REWARD_BPS = 1000; // 10%
 
     struct StakeInfo {
         address staker;
@@ -28,10 +29,17 @@ contract LPStakingRewards is IERC721Receiver {
     uint256 public weeklyRewardAmount;
     uint256 public totalStakedLiquidity;
     uint256 public burnableRewards;
+    uint256 public rewardFund;
 
     constructor(address _rewardToken, address _positionManager) {
         rewardToken = IERC20(_rewardToken);
         positionManager = IPositionManager(_positionManager);
+    }
+
+    function receiveRewardTokens(address from, uint256 amount) external {
+        require(from == address(rewardToken), "Invalid reward token source");
+        rewardToken.transferFrom(msg.sender, address(this), amount);
+        rewardFund += amount;
     }
 
     function stake(uint256 tokenId) external {
@@ -55,10 +63,10 @@ contract LPStakingRewards is IERC721Receiver {
         StakeInfo storage stakeInfo = stakes[tokenId];
         require(stakeInfo.staker == msg.sender, "Not staker");
 
-        // Optional: auto-claim before unstaking
         (uint256 claimable, uint256 burnable) = getClaimableRewards(tokenId);
         if (claimable > 0) {
             rewardToken.transfer(msg.sender, claimable);
+            rewardFund -= claimable;
         }
         if (burnable > 0) {
             burnableRewards += burnable;
@@ -82,6 +90,7 @@ contract LPStakingRewards is IERC721Receiver {
 
         if (claimable > 0) {
             rewardToken.transfer(msg.sender, claimable);
+            rewardFund -= claimable;
         }
     }
 
@@ -93,13 +102,15 @@ contract LPStakingRewards is IERC721Receiver {
         if (weeksElapsed == 0 || totalStakedLiquidity == 0) return (0, 0);
 
         uint128 liq = stakeInfo.liquidity;
-        uint256 rewardPerWeek = (liq * weeklyRewardAmount) / totalStakedLiquidity;
+        uint256 effectiveWeeklyReward = rewardFund < weeklyRewardAmount ? rewardFund : weeklyRewardAmount;
+        uint256 rewardPerWeek = (liq * effectiveWeeklyReward) / totalStakedLiquidity;
 
         for (uint256 i = 0; i < weeksElapsed; i++) {
-            uint256 weekStart = stakeInfo.lastClaimedAt + (i * WEEK);
-            if (weekStart < stakeInfo.stakeTime + DECAY_PERIOD) {
-                claimable += rewardPerWeek / 10;
-                burnable += rewardPerWeek - (rewardPerWeek / 10);
+            uint256 globalWeekIndex = (stakeInfo.lastClaimedAt - stakeInfo.stakeTime) / WEEK + i;
+            if (globalWeekIndex < DECAY_PERIOD / WEEK) {
+                uint256 earlyReward = (rewardPerWeek * EARLY_REWARD_BPS) / 10000;
+                claimable += earlyReward;
+                burnable += rewardPerWeek - earlyReward;
             } else {
                 claimable += rewardPerWeek;
             }
@@ -111,10 +122,10 @@ contract LPStakingRewards is IERC721Receiver {
         require(toBurn > 0, "Nothing to burn");
 
         burnableRewards = 0;
-        rewardToken.transfer(address(0), toBurn); // or call burn if the token supports it
+        rewardFund -= toBurn;
+        rewardToken.transfer(address(0), toBurn);
     }
 
-    /// @dev Accept ERC721 (PositionManager) transfers
     function onERC721Received(
         address,
         address,

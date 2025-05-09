@@ -280,25 +280,6 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
   });
 });
 
-async function ownerCollectsPositionFees(poolHelper, ownerAddress, ownerTokenId) {
-  console.log("──────────── Owner Collects Fees ─────────────");
-  // Get balances before
-  const ethBefore = await ethers.provider.getBalance(ownerAddress);
-  const limBefore = await limToken.balanceOf(ownerAddress);
-
-  // Call the fee collection
-  await poolHelper.collectPositionFees(ethers.ZeroAddress, limToken.target, ownerTokenId);
-
-  // Get balances after
-  const ethAfter = await ethers.provider.getBalance(ownerAddress);
-  const limAfter = await limToken.balanceOf(ownerAddress);
-
-  // Print deltas
-  console.log("💰 ETH collected:", ethAfter - ethBefore);
-  console.log("🪙 LIM collected:", limAfter - limBefore);
-  console.log("─────────────────────────────────────────────────");
-}
-
 // _zeroForOne = true for ETH -> LIM, false for LIM -> ETH
 async function swap(_zeroForOne, _amountIn, _user) {
     const poolKey = {
@@ -321,6 +302,25 @@ async function swap(_zeroForOne, _amountIn, _user) {
     
     await log_TokenBalance(limToken, "LIM", _user.address, "User1");
     await log_EthBalance(_user.address, "User1");
+}
+
+async function ownerCollectsPositionFees(poolHelper, ownerAddress, ownerTokenId) {
+    console.log("──────────── Owner Collects Fees ─────────────");
+    // Get balances before
+    const ethBefore = await ethers.provider.getBalance(ownerAddress);
+    const limBefore = await limToken.balanceOf(ownerAddress);
+
+    // Call the fee collection
+    await poolHelper.collectPositionFees(ethers.ZeroAddress, limToken.target, ownerTokenId);
+
+    // Get balances after
+    const ethAfter = await ethers.provider.getBalance(ownerAddress);
+    const limAfter = await limToken.balanceOf(ownerAddress);
+
+    // Print deltas
+    console.log("💰 ETH collected:", ethAfter - ethBefore);
+    console.log("🪙 LIM collected:", limAfter - limBefore);
+    console.log("─────────────────────────────────────────────────");
 }
 
 async function userMintsPosition(poolHelper, user) {

@@ -96,6 +96,48 @@ describe("LiminalStakingPool Shared Emissions", function () {
     expect(p2).to.be.closeTo(expected2, tolerance);
   });
   
+  it("should distribute rewards correctly when users stake at different times", async function () {
+    const { user1, user2, lim, pool } = await loadFixture(deployFixture);
+  
+    const stakeAmount = ethers.parseUnits("100", 18);
+  
+    // 1) User1 stakes at t = 0
+    await lim.connect(user1).approve(pool.getAddress(), stakeAmount);
+    await pool.connect(user1).stake(stakeAmount);
+  
+    // 2) Advance 12 hours
+    await time.increase(12 * 60 * 60);
+    await ethers.provider.send("evm_mine");
+  
+    // 3) User2 stakes at t = 12h
+    await lim.connect(user2).approve(pool.getAddress(), stakeAmount);
+    await pool.connect(user2).stake(stakeAmount);
+  
+    // 4) Advance another 12 hours
+    await time.increase(12 * 60 * 60);
+    await ethers.provider.send("evm_mine");
+  
+    // 5) Compute daily emission from on-chain rewardPerSecond
+    const rps = await pool.rewardPerSecond();       // BigInt
+    const dailyEmission = rps * 86400n;             // seconds per day
+  
+    // 75% and 25% splits
+    const expected1 = (dailyEmission * 75n) / 100n;
+    const expected2 = (dailyEmission * 25n) / 100n;
+    const tolerance = ethers.parseUnits("0.09", 18);
+  
+    // 6) Query pendingReward
+    const p1 = await pool.pendingReward(user1.address);
+    const p2 = await pool.pendingReward(user2.address);
+  
+    console.log("🧑‍🌾 User1 pending:", p1.toString());
+    console.log("🧑‍🌾 User2 pending:", p2.toString());
+  
+    // 7) Assert 75/25 within tolerance
+    expect(p1).to.be.closeTo(expected1, tolerance);
+    expect(p2).to.be.closeTo(expected2, tolerance);
+  });
+  
   it("should transfer correct reward amount when claimed", async function () {
     const { user1, lim, pool, stakeAmount1 } = await loadFixture(deployFixture);
     await lim.connect(user1).approve(pool.getAddress(), stakeAmount1);

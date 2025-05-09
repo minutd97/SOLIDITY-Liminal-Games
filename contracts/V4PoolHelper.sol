@@ -499,7 +499,12 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     }
 
     /// @dev Accept ERC721 (PositionManager) transfers
-    function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data) external pure override returns (bytes4) {
+    function onERC721Received(
+        address,
+        address,
+        uint256,
+        bytes calldata
+    ) external pure override returns (bytes4) {
         return IERC721Receiver.onERC721Received.selector;
     }
 }

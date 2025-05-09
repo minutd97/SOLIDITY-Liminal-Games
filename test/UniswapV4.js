@@ -3,10 +3,10 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 require("dotenv").config();
 
-const FORK_MAINNET = process.env.FORK_MAINNET;
+const FORK_MAINNET = process.env.FORK_MAINNET === "true";
 const POOL_MANAGER = FORK_MAINNET ? "0x360e68faccca8ca495c1b759fd9eee466db9fb32" : "0xFB3e0C6F74eB1a21CC1Da29aeC80D2Dfe6C9a317";
 const POSITION_MANAGER = FORK_MAINNET ? "0xd88f38f930b7952f2db2432cb002e7abbf3dd869" : "0xAc631556d3d4019C95769033B5E719dD77124BAc";
-const PERMIT2_ADDRESS = FORK_MAINNET ? "0x000000000022D473030F116dDEE9F6B43aC78BA3" : "0x31c2F6fcFf4F8759b3Bd5Bf0e1084A055615c768";
+const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 const UNIVERSAL_ROUTER = FORK_MAINNET ? "0xa51afafe0263b40edaef0df8781ea9aa03e381a3" : "0xefd1d4bd4cf1e86da286bb4cb1b8bced9c10ba47";
 
 const POSITION_MANAGER_ABI = [
@@ -132,6 +132,7 @@ const PERMIT2_ABI = [
 ];
   
 let limToken, swapHelper, hookAddress;
+let tokenId;
 
 describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and more", function () {
   async function deployFixture() {
@@ -390,13 +391,8 @@ async function userMintsPosition(poolHelper, user) {
   if (events.length === 0) {
     throw new Error("No mint Transfer event found");
   }
-  const tokenId = events[events.length - 1].args.tokenId;
+  tokenId = events[events.length - 1].args.tokenId;
   console.log("🆔 Minted Position tokenId =", tokenId.toString());
-
-  // 4) Store it on-chain
-  await poolHelper.connect(user).storeTokenId(tokenId);
-  console.log("✅ userMintPosition(): token ID stored");
-  console.log("─────────────────────────────────────────────────");
 }
 
 async function userIncreasesLiquidity(poolHelper, user) {
@@ -422,12 +418,12 @@ async function userIncreasesLiquidity(poolHelper, user) {
   }
 
   // 3) Build calldata via the helper
-  const [actions, params] = await poolHelper.connect(user)
-      .buildIncreaseLiquidityParamsForUser(
+  const [actions, params] = await poolHelper.connect(user).buildIncreaseLiquidityParamsForUser(
           ethers.ZeroAddress,       // token0 (ETH)
           limToken.target,          // token1 (LIM)
           extraETH,                 // amount0 (ETH)
-          extraLIM                  // amount1 (LIM)
+          extraLIM,                 // amount1 (LIM)
+          tokenId
       );
 
   const inner = ethers.AbiCoder.defaultAbiCoder().encode(
@@ -461,7 +457,6 @@ async function userDecreasesLiquidity(poolHelper, user) {
   );
 
   // 1) Fetch the user’s tokenId & current liquidity via positionInfo
-  const tokenId = await poolHelper.userTokenIds(user.address);
   let currentLiq = await positionManager.getPositionLiquidity(tokenId);
   currentLiq = currentLiq / 2n; // Take only half of the liquidity
   console.log("Current liquidity:", currentLiq.toString());
@@ -484,7 +479,8 @@ async function userDecreasesLiquidity(poolHelper, user) {
           limToken.target,       // token1 (LIM)
           currentLiq,            // liquidity delta
           min0,             // min amount0
-          min1              // min amount1
+          min1,              // min amount1
+          tokenId
       );
 
   const inner = ethers.AbiCoder.defaultAbiCoder().encode(
@@ -528,7 +524,8 @@ async function userCollectsPositionFees(poolHelper, user) {
     .connect(user)
     .buildCollectFeesParamsForUser(
       ethers.ZeroAddress,  // token0 (ETH)
-      limToken.target      // token1 (LIM)
+      limToken.target,     // token1 (LIM)
+      tokenId
     );
 
   const inner = ethers.AbiCoder.defaultAbiCoder().encode(
@@ -565,7 +562,6 @@ async function userBurnPosition(poolHelper, user) {
     user
   );
 
-  const tokenId = await poolHelper.userTokenIds(user.address);
   console.log("— Burning position tokenId =", tokenId.toString());
 
   try {
@@ -582,7 +578,8 @@ async function userBurnPosition(poolHelper, user) {
       ethers.ZeroAddress,      // token0 = ETH
       limToken.target,         // token1 = LIM
       0n,
-      0n
+      0n,
+      tokenId
     );
 
   const inner = ethers.AbiCoder.defaultAbiCoder().encode(

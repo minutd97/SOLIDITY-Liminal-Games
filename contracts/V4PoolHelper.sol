@@ -47,8 +47,6 @@ contract V4PoolHelper is Ownable, AccessControl {
     int24 public standardTickLower;
     int24 public standardTickUpper;
 
-    mapping(address => uint256) public userTokenIds;
-
     constructor(address _poolManager, address _positionManager, address _permit2, address _hookAddress) Ownable(msg.sender) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         poolManager = IPoolManager(_poolManager);
@@ -151,7 +149,6 @@ contract V4PoolHelper is Ownable, AccessControl {
     }
 
     function buildMintParamsForUser(PoolInput calldata input) external view returns (bytes memory actions, bytes[] memory params) {
-        require(userTokenIds[msg.sender] == 0, "Already minted");
         require(standardTickLower < standardTickUpper, "Pool not initialized");
 
         uint160 sqrtPriceX96 = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
@@ -192,9 +189,7 @@ contract V4PoolHelper is Ownable, AccessControl {
         params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
     }
 
-    function buildIncreaseLiquidityParamsForUser(address token0, address token1, uint256 amount0Desired, uint256 amount1Desired) external view returns (bytes memory actions, bytes[] memory params) {
-        uint256 tokenId = userTokenIds[msg.sender];
-        require(tokenId != 0, "Not minted yet");
+    function buildIncreaseLiquidityParamsForUser(address token0, address token1, uint256 amount0Desired, uint256 amount1Desired, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
         require(amount0Desired > 0 && amount1Desired > 0, "Amounts must be > 0");
 
@@ -237,17 +232,7 @@ contract V4PoolHelper is Ownable, AccessControl {
     }
 
     /// @notice  Build decrease-liquidity action & params for the caller’s single position
-    function buildDecreaseLiquidityParamsForUser(
-        address token0,
-        address token1,
-        uint128 liquidityDelta,
-        uint128 amount0Min,
-        uint128 amount1Min
-    ) external view returns (bytes memory actions, bytes[] memory params) {
-        // 1) Ensure the user has a position
-        uint256 tokenId = userTokenIds[msg.sender];
-        require(tokenId != 0, "Not minted yet");
-
+    function buildDecreaseLiquidityParamsForUser(address token0, address token1, uint128 liquidityDelta, uint128 amount0Min, uint128 amount1Min, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
         // 2) Encode the actions: DECREASE_LIQUIDITY + TAKE_PAIR
         actions = abi.encodePacked(
             uint8(Actions.DECREASE_LIQUIDITY),
@@ -282,10 +267,7 @@ contract V4PoolHelper is Ownable, AccessControl {
     }
 
     /// @notice Build calldata to collect all fees for the user’s position
-    function buildCollectFeesParamsForUser(address token0, address token1) external view returns (bytes memory actions, bytes[] memory params) {
-        uint256 tokenId = userTokenIds[msg.sender];
-        require(tokenId != 0, "No position");
-
+    function buildCollectFeesParamsForUser(address token0, address token1, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
         // 1) DECREASE_LIQUIDITY with zero delta
         // 2) TAKE_PAIR to collect everything
         actions = abi.encodePacked(
@@ -318,15 +300,7 @@ contract V4PoolHelper is Ownable, AccessControl {
         );
     }
 
-    function buildBurnPositionParamsForUser(
-        address token0,
-        address token1,
-        uint128 amount0Min,
-        uint128 amount1Min
-    ) external view returns (bytes memory actions, bytes[] memory params) {
-        uint256 tokenId = userTokenIds[msg.sender];
-        require(tokenId != 0, "No position to burn");
-
+    function buildBurnPositionParamsForUser(address token0, address token1, uint128 amount0Min, uint128 amount1Min, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
         // Wrap the raw token addresses into Uniswap Currency objects
         Currency currency0 = Currency.wrap(token0);
         Currency currency1 = Currency.wrap(token1);
@@ -357,10 +331,8 @@ contract V4PoolHelper is Ownable, AccessControl {
     }
 
     /// @notice  Preview token amounts for a given liquidity decrease using internal helper
-    function previewAmountsForLiquidity(uint128 liquidityDelta)external view returns (uint256 amount0, uint256 amount1) {
-        // 1) Ensure the position exists and pool is initialized
-        uint256 tokenId = userTokenIds[msg.sender];
-        require(tokenId != 0, "Position not minted yet");
+    function previewAmountsForLiquidity(uint128 liquidityDelta) external view returns (uint256 amount0, uint256 amount1) {
+        // 1) Ensure the pool is initialized
         require(standardTickLower < standardTickUpper, "Pool not initialized");
 
         // 2) Load current price and tick boundaries
@@ -377,11 +349,6 @@ contract V4PoolHelper is Ownable, AccessControl {
         );
     }
 
-    /// @notice Given exactly one of amount0 or amount1, returns the matching pair for that exact input.
-    /// @param exact0   If >0, compute how much token1 is needed for this exact amount0; otherwise must be 0.
-    /// @param exact1   If >0, compute how much token0 is needed for this exact amount1; otherwise must be 0.
-    /// @return amount0 The actual amount0 you must supply (equals exact0 if you drove on exact0, or computed if drove on exact1)
-    /// @return amount1 The actual amount1 you must supply (equals exact1 if you drove on exact1, or computed if drove on exact0)
     function getAmountsForExact(uint256 exact0, uint256 exact1) external view returns (uint256 amount0, uint256 amount1) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
         require((exact0 == 0) != (exact1 == 0), "Specify exactly one exact amount");
@@ -495,11 +462,6 @@ contract V4PoolHelper is Ownable, AccessControl {
         result = (result + x / result) >> 1;
         uint256 r1 = x / result;
         return (result < r1 ? result : r1);
-    }
-
-    function storeTokenId(uint256 tokenId) external {
-        require(userTokenIds[msg.sender] == 0, "Already stored");
-        userTokenIds[msg.sender] = tokenId;
     }
 
     function setupPermit2Approvals(address token0, address token1) external onlyRole(POOL_CREATOR) {

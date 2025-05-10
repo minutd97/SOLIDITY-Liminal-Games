@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 interface ILiminalToken {
     function transfer(address to, uint256 amount) external returns (bool);
@@ -15,39 +16,43 @@ interface IPositionManager {
     function safeTransferFrom(address from, address to, uint256 tokenId) external;
 }
 
-contract LPStakingRewards is IERC721Receiver {
-    ILiminalToken public immutable limToken;
-    IPositionManager public immutable positionManager;
+/// @title LP Staking Rewards - Stake Uniswap V4 LP NFTs to earn LIM with decay-based rewards
+contract LPStakingRewards is IERC721Receiver, ReentrancyGuard {
+    ILiminalToken public immutable limToken; // Reward token distributed over time
+    IPositionManager public immutable positionManager; // Uniswap V4 PositionManager (ERC721)
 
-    uint256 public constant WEEK = 7 days;
-    uint256 public constant DECAY_PERIOD = 4 weeks;
-    uint256 public constant EARLY_REWARD_BPS = 1000; // 10%
+    uint256 public constant WEEK = 7 days; // Time interval used for rewards
+    uint256 public constant DECAY_PERIOD = 4 weeks; // Time before full rewards apply
+    uint256 public constant EARLY_REWARD_BPS = 1000; // 10% claimable if within decay period
 
     struct StakeInfo {
-        address staker;
-        uint128 liquidity;
-        uint256 stakeTime;
-        uint256 lastClaimedAt;
+        address staker; // Who owns the staked NFT
+        uint128 liquidity; // Liquidity of the NFT at time of staking
+        uint256 stakeTime; // Timestamp when staking began
+        uint256 lastClaimedAt; // Last time rewards were claimed
     }
 
-    mapping(uint256 => StakeInfo) public stakes;
-    uint256 public weeklyRewardAmount = 200_000 * 1e18;
-    uint256 public totalStakedLiquidity;
-    uint256 public burnableRewards;
-    uint256 public rewardFund;
-
+    mapping(uint256 => StakeInfo) public stakes; // tokenId => staking info
+    uint256 public weeklyRewardAmount = 200_000 * 1e18; // Max weekly reward pool
+    uint256 public totalStakedLiquidity; // Sum of all active NFT liquidities
+    uint256 public burnableRewards; // Rewards decayed (non-claimable) but not yet burned
+    uint256 public rewardFund; // Total tokens available for reward distribution
+ 
+    /// @notice Initializes the staking contract with the reward token and position manager
     constructor(address _limToken, address _positionManager) {
         limToken = ILiminalToken(_limToken);
         positionManager = IPositionManager(_positionManager);
     }
 
+    /// @notice Deposits LIM tokens into the reward fund (only accepted from LIM token contract)
     function receiveRewardTokens(address from, uint256 amount) external {
         require(from == address(limToken), "Invalid reward token source");
         limToken.transferFrom(msg.sender, address(this), amount);
         rewardFund += amount;
     }
 
-    function stake(uint256 tokenId) external {
+    /// @notice Stake a Uniswap V4 LP position NFT into the contract
+    function stake(uint256 tokenId) external nonReentrant {
         require(stakes[tokenId].staker == address(0), "Already staked");
 
         positionManager.safeTransferFrom(msg.sender, address(this), tokenId);
@@ -64,7 +69,8 @@ contract LPStakingRewards is IERC721Receiver {
         totalStakedLiquidity += liquidity;
     }
 
-    function unstake(uint256 tokenId) external {
+    /// @notice Unstake a previously staked NFT and automatically claim any pending rewards
+    function unstake(uint256 tokenId) external nonReentrant {
         StakeInfo storage stakeInfo = stakes[tokenId];
         require(stakeInfo.staker == msg.sender, "Not staker");
 
@@ -83,9 +89,13 @@ contract LPStakingRewards is IERC721Receiver {
         positionManager.safeTransferFrom(address(this), msg.sender, tokenId);
     }
 
-    function claim(uint256 tokenId) external {
+    /// @notice Claim rewards for a staked NFT if at least one full week has passed
+    function claim(uint256 tokenId) external nonReentrant {
         StakeInfo storage stakeInfo = stakes[tokenId];
         require(stakeInfo.staker == msg.sender, "Not staker");
+
+        // Ensure at least one full week has passed
+        require(block.timestamp >= stakeInfo.lastClaimedAt + WEEK, "Must wait 1 full week");
 
         (uint256 claimable, uint256 burnable) = getClaimableRewards(tokenId);
         require(claimable > 0 || burnable > 0, "Nothing to claim");
@@ -99,6 +109,7 @@ contract LPStakingRewards is IERC721Receiver {
         }
     }
 
+    /// @notice View how much claimable and burnable reward a staked NFT has accrued
     function getClaimableRewards(uint256 tokenId) public view returns (uint256 claimable, uint256 burnable) {
         StakeInfo memory stakeInfo = stakes[tokenId];
         require(stakeInfo.staker != address(0), "Not staked");
@@ -122,7 +133,8 @@ contract LPStakingRewards is IERC721Receiver {
         }
     }
 
-    function burnAccumulated() external {
+    /// @notice Burns all accumulated burnable rewards permanently
+    function burnAccumulated() external nonReentrant {
         uint256 toBurn = burnableRewards;
         require(toBurn > 0, "Nothing to burn");
 
@@ -131,6 +143,7 @@ contract LPStakingRewards is IERC721Receiver {
         limToken.burn(toBurn);
     }
 
+    /// @notice Accepts ERC721 safe transfers (required by Uniswap V4 positions)
     function onERC721Received(
         address,
         address,

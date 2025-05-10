@@ -33,21 +33,23 @@ struct PoolInput {
     int24 tickUpper;
 }
 
+/// @title V4PoolHelper – Uniswap V4 Liquidity Management Utility
 contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     using CurrencyLibrary for Currency;
 
-    bytes32 public constant POOL_CREATOR = keccak256("POOL_CREATOR");
+    bytes32 public constant POOL_CREATOR = keccak256("POOL_CREATOR"); // Role identifier for pool creators
 
-    IPoolManager public immutable poolManager;
-    IPositionManager public immutable positionManager;
-    IAllowanceTransfer public immutable permit2;
-    address public immutable hookAddress;
+    IPoolManager public immutable poolManager; // Uniswap V4 PoolManager contract
+    IPositionManager public immutable positionManager; // Uniswap V4 PositionManager contract
+    IAllowanceTransfer public immutable permit2; // Permit2 contract for token approvals
+    address public immutable hookAddress; // Address of the deployed hook contract
 
-    PoolKey public poolKey;
-    uint256 private constant Q96 = 2**96;
-    int24 public standardTickLower;
-    int24 public standardTickUpper;
+    PoolKey public poolKey; // Stored PoolKey after pool creation
+    uint256 private constant Q96 = 2**96; // Constant used in price and liquidity calculations
+    int24 public standardTickLower; // Stored lower tick of the standard range
+    int24 public standardTickUpper; // Stored upper tick of the standard range
 
+    /// @notice Initializes the helper with references to PoolManager, PositionManager, Permit2, and Hook
     constructor(address _poolManager, address _positionManager, address _permit2, address _hookAddress) Ownable(msg.sender) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         poolManager = IPoolManager(_poolManager);
@@ -56,6 +58,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         hookAddress = _hookAddress;
     }
 
+    /// @notice Creates a new pool and mints a position with initial liquidity
     function createPoolAndAddLiquidity(PoolInput calldata _input) external payable onlyRole(POOL_CREATOR) {
         (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) = calculateTicks(_input);
         standardTickLower = tickLower;
@@ -111,6 +114,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         positionManager.modifyLiquidities(inner, deadline);
     }
 
+    /// @notice Calculates tickLower, tickUpper and initial sqrtPriceX96 based on input amounts
     function calculateTicks(PoolInput memory input) internal pure returns (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) {
         int24 tickSpacing = input.tickSpacing;
 
@@ -131,6 +135,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         require(tickLower < tickUpper, "Invalid ticks calculated");
     }
 
+    /// @notice Builds the full params array for a new pool initialization and position mint
     function buildPositionParams(PoolKey memory pool, bytes memory actions, bytes[] memory mintParams, uint160 sqrtPriceX96) internal view returns (bytes[] memory) {
         bytes[] memory params = new bytes[](2);
         params[0] = abi.encodeWithSelector(
@@ -146,6 +151,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         return params;
     }
 
+    /// @notice Builds mint position parameters for pool creation
     function buildMintParams(PoolKey memory pool, PoolInput memory input, uint128 liquidity) internal view returns (bytes[] memory) {
         bytes[] memory mintParams = new bytes[](2);
         mintParams[0] = abi.encode(
@@ -162,6 +168,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         return mintParams;
     }
 
+    /// @notice Builds mint position parameters for a user adding a new LP position
     function buildMintParamsForUser(PoolInput calldata input) external view returns (bytes memory actions, bytes[] memory params) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
 
@@ -172,18 +179,15 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
             TickMath.getSqrtPriceAtTick(standardTickUpper),
             input.amount0,
             input.amount1
-        ); //
+        );
         require(liquidity > 0, "No liquidity");
 
-        // Build actions
         actions = abi.encodePacked(
             uint8(Actions.MINT_POSITION),
             uint8(Actions.SETTLE_PAIR)
         );
 
-        // Build params
         params = new bytes[](2);
-
         params[0] = abi.encode(
             poolKey,
             standardTickLower,
@@ -203,11 +207,11 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         params[1] = abi.encode(poolKey.currency0, poolKey.currency1);
     }
 
+    /// @notice Builds parameters for increasing liquidity in an existing LP position
     function buildIncreaseLiquidityParamsForUser(address token0, address token1, uint256 amount0Desired, uint256 amount1Desired, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
         require(amount0Desired > 0 && amount1Desired > 0, "Amounts must be > 0");
 
-        // 1) Compute how much liquidity that amount buys at current price
         uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmounts(
             IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId()),
             TickMath.getSqrtPriceAtTick(standardTickLower),
@@ -217,21 +221,17 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         );
         require(liquidityDelta > 0, "No additional liquidity");
 
-        // 2) Build the action bytes
         actions = abi.encodePacked(
             uint8(Actions.INCREASE_LIQUIDITY),
             uint8(Actions.SETTLE_PAIR)
         );
 
-        // 3) Inline everything into the params array
         params = new bytes[](2);
         params[0] = abi.encode(
             tokenId,
             liquidityDelta,
-            // max amounts = desired + 1 (buffer)
             uint128(amount0Desired + 1),
             uint128(amount1Desired + 1),
-            // hookData inline
             abi.encode(
                 CurrencyLibrary.fromId(uint160(token0)),
                 CurrencyLibrary.fromId(uint160(token1)),
@@ -245,25 +245,19 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         );
     }
 
-    /// @notice  Build decrease-liquidity action & params for the caller’s single position
+    /// @notice Builds parameters to decrease liquidity from a user’s position
     function buildDecreaseLiquidityParamsForUser(address token0, address token1, uint128 liquidityDelta, uint128 amount0Min, uint128 amount1Min, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
-        // 2) Encode the actions: DECREASE_LIQUIDITY + TAKE_PAIR
         actions = abi.encodePacked(
             uint8(Actions.DECREASE_LIQUIDITY),
             uint8(Actions.TAKE_PAIR)
         );
 
-        // 3) Prepare params array
         params = new bytes[](2);
-
-        // 3a) Action 0: decrease liquidity
         params[0] = abi.encode(
             tokenId,
             liquidityDelta,
-            // minimum token amounts to receive
             amount0Min,
             amount1Min,
-            // inline hookData for settlement (token IDs & native flags)
             abi.encode(
                 CurrencyLibrary.fromId(uint160(token0)),
                 CurrencyLibrary.fromId(uint160(token1)),
@@ -272,7 +266,6 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
             )
         );
 
-        // 3b) Action 1: take pair (same hookData as above, no extra args)
         params[1] = abi.encode(
             CurrencyLibrary.fromId(uint160(token0)),
             CurrencyLibrary.fromId(uint160(token1)),
@@ -280,24 +273,19 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         );
     }
 
-    /// @notice Build calldata to collect all fees for the user’s position
+    /// @notice Builds calldata to collect all fees from a user’s position
     function buildCollectFeesParamsForUser(address token0, address token1, uint256 tokenId) public view returns (bytes memory actions, bytes[] memory params) {
-        // 1) DECREASE_LIQUIDITY with zero delta
-        // 2) TAKE_PAIR to collect everything
         actions = abi.encodePacked(
             uint8(Actions.DECREASE_LIQUIDITY),
             uint8(Actions.TAKE_PAIR)
         );
 
         params = new bytes[](2);
-
-        // DECREASE_LIQUIDITY(tokenId, 0, 0, 0, hookData)
         params[0] = abi.encode(
             tokenId,
             uint128(0),
             uint128(0),
             uint128(0),
-            // same hookData as in mint/increase
             abi.encode(
                 CurrencyLibrary.fromId(uint160(token0)),
                 CurrencyLibrary.fromId(uint160(token1)),
@@ -306,7 +294,6 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
             )
         );
 
-        // TAKE_PAIR(currency0, currency1, recipient)
         params[1] = abi.encode(
             CurrencyLibrary.fromId(uint160(token0)),
             CurrencyLibrary.fromId(uint160(token1)),
@@ -314,20 +301,17 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         );
     }
 
+    /// @notice Builds parameters to burn a position NFT and withdraw all tokens
     function buildBurnPositionParamsForUser(address token0, address token1, uint128 amount0Min, uint128 amount1Min, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
-        // Wrap the raw token addresses into Uniswap Currency objects
         Currency currency0 = Currency.wrap(token0);
         Currency currency1 = Currency.wrap(token1);
 
-        // 1) BURN_POSITION → 2) TAKE_PAIR
         actions = abi.encodePacked(
             uint8(Actions.BURN_POSITION),
             uint8(Actions.TAKE_PAIR)
         );
 
         params = new bytes[](2);
-
-        // 1) Burn the position (this withdraws the funds into the PositionManager)
         params[0] = abi.encode(
             tokenId,
             amount0Min,
@@ -340,21 +324,17 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
             )
         );
 
-        // 2) Take the withdrawn funds out of the PositionManager to the user
         params[1] = abi.encode(currency0, currency1, msg.sender);
     }
 
-    /// @notice  Preview token amounts for a given liquidity decrease using internal helper
+    /// @notice Returns token amounts receivable from a given liquidity delta
     function previewAmountsForLiquidity(uint128 liquidityDelta) external view returns (uint256 amount0, uint256 amount1) {
-        // 1) Ensure the pool is initialized
         require(standardTickLower < standardTickUpper, "Pool not initialized");
 
-        // 2) Load current price and tick boundaries
         uint160 sqrtP = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
         uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
         uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
 
-        // 3) Delegate to your internal helper
         (amount0, amount1) = _getAmountsForLiquidity(
             liquidityDelta,
             sqrtA,
@@ -363,6 +343,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         );
     }
 
+    /// @notice Returns both token amounts for an exact input of either token0 or token1
     function getAmountsForExact(uint256 exact0, uint256 exact1) external view returns (uint256 amount0, uint256 amount1) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
         require((exact0 == 0) != (exact1 == 0), "Specify exactly one exact amount");
@@ -398,6 +379,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         );
     }
 
+    /// @notice Internal helper to compute token0 and token1 amounts from liquidity
     function _getAmountsForLiquidity(uint128 liquidity, uint160 sqrtRatioAX96, uint160 sqrtRatioBX96, uint160 sqrtPriceX96) internal pure returns (uint256 amount0, uint256 amount1) {
         if (sqrtRatioAX96 > sqrtRatioBX96) (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
 
@@ -427,6 +409,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         }
     }
 
+    /// @notice Computes sqrtPriceX96 from token0 and token1 amounts
     function getSqrtPriceX96FromAmounts(uint256 token0Amount, uint256 token1Amount) public pure returns (uint160) {
         require(token0Amount > 0 && token1Amount > 0, "Amounts must be > 0");
 
@@ -436,6 +419,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         return uint160(sqrtRatioX96);
     }
 
+    /// @notice Integer square root function for large uint256 values
     function sqrtUint(uint256 x) internal pure returns (uint256 result) {
         if (x == 0) return 0;
         uint256 xx = x;
@@ -478,6 +462,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         return (result < r1 ? result : r1);
     }
 
+    /// @notice Sets max token approvals in Permit2 for both tokens used in the pool
     function setupPermit2Approvals(address token0, address token1) external onlyRole(POOL_CREATOR) {
         if (token0 != address(0)) {
             IERC20(token0).approve(address(permit2), type(uint256).max);
@@ -490,15 +475,17 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         }
     }
 
+    /// @notice Grants POOL_CREATOR role to an address
     function grantCreatorRole(address account) public onlyOwner {
         grantRole(POOL_CREATOR, account);
     }
 
+    /// @notice Revokes POOL_CREATOR role from an address
     function revokeCreatorRole(address account) public onlyOwner {
         revokeRole(POOL_CREATOR, account);
     }
 
-    /// @dev Accept ERC721 (PositionManager) transfers
+    /// @notice Required override for receiving ERC721 tokens from PositionManager
     function onERC721Received(
         address,
         address,

@@ -143,6 +143,7 @@ const PERMIT2_ABI = [
   
 let limToken, swapHelper, hookAddress;
 let tokenId;
+let tokenId2;
 
 describe("LP Staking Rewards full test with Uniswap V4 pool created", function () {
   async function deployFixture() {
@@ -206,9 +207,11 @@ describe("LP Staking Rewards full test with Uniswap V4 pool created", function (
     await limToken.connect(owner).approve(presale.target, tokensForPresale)
     await presale.connect(owner).depositPresaleTokens(tokensForPresale);
 
-    await limToken.transfer(user1.address, ethers.parseUnits("70000000", 18));
+    await limToken.transfer(user1.address, ethers.parseUnits("35000000", 18));
     await log_TokenBalance(limToken, "LIM", user1.address, "user1");
-    console.log("user 1 address : ", user1.address);
+
+    await limToken.transfer(user2.address, ethers.parseUnits("35000000", 18));
+    await log_TokenBalance(limToken, "LIM", user2.address, "user2");
 
     await limToken.approve(lpStakingRewards.target, ethers.parseUnits("35000000", 18));
     await lpStakingRewards.receiveRewardTokens(limToken.target, ethers.parseUnits("35000000", 18));
@@ -217,7 +220,7 @@ describe("LP Staking Rewards full test with Uniswap V4 pool created", function (
   }
 
 it("V4 Pool Creation + Liquidty providing", async function () {
-    const { owner, presale, user1, poolHelper, lpStakingRewards} = await loadFixture(deployFixture);
+    const { owner, presale, user1, user2, poolHelper, lpStakingRewards} = await loadFixture(deployFixture);
     const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, owner);
     
     await presale.startPresale(3600); // 1-hour presale
@@ -266,8 +269,9 @@ it("V4 Pool Creation + Liquidty providing", async function () {
     const totalContributions = await presale.totalContributions();
     expect(totalContributions).to.equal(0);
 
-    await userMintsPosition(poolHelper, user1);
-    
+    await userMintsPosition(poolHelper, user1, ethers.parseEther("3"));
+    await userMintsPosition(poolHelper, user2, ethers.parseEther("1.5"));
+
     // --- Stake ---
     console.log("🔐 Approving and staking tokenId", tokenId.toString());
     await positionManager.connect(user1).approve(lpStakingRewards.target, tokenId);
@@ -277,18 +281,35 @@ it("V4 Pool Creation + Liquidty providing", async function () {
     expect(stakeInfo.liquidity).to.be.gt(0);
     console.log("✅ Staked successfully with liquidity:", stakeInfo.liquidity.toString());
 
-    // --- Wait < 4 weeks ---
-    const seconds = 3 * 7 * 24 * 60 * 60 + 1000; // 3 weeks + one second
-    console.log("🕒 Advancing time by", seconds / 86400, "days");
-    await time.increase(seconds);
+    // --- Wait 2 weeks ---
+    const twoWeeks = 2 * 7 * 24 * 60 * 60 + 1000;
+    console.log("⏳ Advancing time by 2 weeks...");
+    await time.increase(twoWeeks);
+    await ethers.provider.send("evm_mine");
+
+    // --- Stake user2 ---
+    console.log("🔐 Approving and staking tokenId", tokenId2.toString());
+    await positionManager.connect(user2).approve(lpStakingRewards.target, tokenId2);
+    await lpStakingRewards.connect(user2).stake(tokenId2);
+    const stakeInfo2 = await lpStakingRewards.stakes(tokenId2);
+    expect(stakeInfo2.staker).to.equal(user2.address);
+    console.log("✅ User2 staked tokenId", tokenId2.toString(), "with liquidity:", stakeInfo2.liquidity.toString());
+
+    // --- Wait 1 more week (now user1 = 3w, user2 = 1w) ---
+    const oneWeek = 7 * 24 * 60 * 60 + 1000;
+    console.log("⏳ Advancing time by 1 week...");
+    await time.increase(oneWeek);
     await ethers.provider.send("evm_mine");
 
     // --- Query rewards (expect 10% claimable) ---
     const [claimable1, burnable1] = await lpStakingRewards.getClaimableRewards(tokenId);
     const total1 = claimable1 + burnable1;
-    console.log("📊 3 weeks rewards → Claimable:", ethers.formatUnits(claimable1, 18), "Burnable:", ethers.formatUnits(burnable1, 18));
+    console.log("📊 USER 1 : 3 weeks rewards → Claimable:", ethers.formatUnits(claimable1, 18), "Burnable:", ethers.formatUnits(burnable1, 18));
     expect(claimable1).to.be.closeTo(total1 / 10n, ethers.parseUnits("1", 18));
     expect(burnable1).to.be.closeTo((total1 * 9n) / 10n, ethers.parseUnits("1", 18));
+
+    const [claimable1_user2, burnable1_user2] = await lpStakingRewards.getClaimableRewards(tokenId2);
+    console.log("📊 USER 2 : 1 week rewards → Claimable:", ethers.formatUnits(claimable1_user2, 18), "Burnable:", ethers.formatUnits(burnable1_user2, 18));
 
     // --- Claim ---
     const rewardBefore = await limToken.balanceOf(user1.address);
@@ -346,7 +367,7 @@ it("V4 Pool Creation + Liquidty providing", async function () {
   });
 });
 
-async function userMintsPosition(poolHelper, user) {
+async function userMintsPosition(poolHelper, user, ethAmount) {
   console.log("──────────── User Mints Position ─────────────");
   
   // 1) Instantiate PositionManager and Permit2 contracts connected to the user
@@ -355,7 +376,7 @@ async function userMintsPosition(poolHelper, user) {
 
   // 2) Define how much the user wants to deposit
   const [finalETH, finalLIM] = await poolHelper.getAmountsForExact(
-      ethers.parseEther("3"), // ETH
+      ethAmount, // ETH
       0
   );
     
@@ -404,8 +425,14 @@ async function userMintsPosition(poolHelper, user) {
   const gasUsed = receipt.gasUsed;
   console.log(`✅ userMintPosition() completed, Gas Used in units: ${gasUsed}`);
   
-  tokenId = await returnTokenId(positionManager, user, receipt);
-  console.log("🆔 Minted Position tokenId =", tokenId.toString());
+  if(tokenId == null){
+    tokenId = await returnTokenId(positionManager, user, receipt);   
+    console.log("🆔 Minted Position tokenId =", tokenId.toString());
+  }
+  else{
+    tokenId2 = await returnTokenId(positionManager, user, receipt);   
+    console.log("🆔 Minted Position tokenId =", tokenId2.toString());
+  }
 }
 
 async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {

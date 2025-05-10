@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+
+interface ILiminalToken {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function burn(uint256 amount) external;
+}
 
 interface IPositionManager {
     function getPositionLiquidity(uint256 tokenId) external view returns (uint128);
@@ -11,7 +16,7 @@ interface IPositionManager {
 }
 
 contract LPStakingRewards is IERC721Receiver {
-    IERC20 public immutable rewardToken;
+    ILiminalToken public immutable limToken;
     IPositionManager public immutable positionManager;
 
     uint256 public constant WEEK = 7 days;
@@ -26,19 +31,19 @@ contract LPStakingRewards is IERC721Receiver {
     }
 
     mapping(uint256 => StakeInfo) public stakes;
-    uint256 public weeklyRewardAmount;
+    uint256 public weeklyRewardAmount = 200_000 * 1e18;
     uint256 public totalStakedLiquidity;
     uint256 public burnableRewards;
     uint256 public rewardFund;
 
-    constructor(address _rewardToken, address _positionManager) {
-        rewardToken = IERC20(_rewardToken);
+    constructor(address _limToken, address _positionManager) {
+        limToken = ILiminalToken(_limToken);
         positionManager = IPositionManager(_positionManager);
     }
 
     function receiveRewardTokens(address from, uint256 amount) external {
-        require(from == address(rewardToken), "Invalid reward token source");
-        rewardToken.transferFrom(msg.sender, address(this), amount);
+        require(from == address(limToken), "Invalid reward token source");
+        limToken.transferFrom(msg.sender, address(this), amount);
         rewardFund += amount;
     }
 
@@ -65,7 +70,7 @@ contract LPStakingRewards is IERC721Receiver {
 
         (uint256 claimable, uint256 burnable) = getClaimableRewards(tokenId);
         if (claimable > 0) {
-            rewardToken.transfer(msg.sender, claimable);
+            limToken.transfer(msg.sender, claimable);
             rewardFund -= claimable;
         }
         if (burnable > 0) {
@@ -89,7 +94,7 @@ contract LPStakingRewards is IERC721Receiver {
         burnableRewards += burnable;
 
         if (claimable > 0) {
-            rewardToken.transfer(msg.sender, claimable);
+            limToken.transfer(msg.sender, claimable);
             rewardFund -= claimable;
         }
     }
@@ -123,7 +128,7 @@ contract LPStakingRewards is IERC721Receiver {
 
         burnableRewards = 0;
         rewardFund -= toBurn;
-        rewardToken.transfer(address(0), toBurn);
+        limToken.burn(toBurn);
     }
 
     function onERC721Received(

@@ -7,7 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @title Game Treasury
-/// @notice Manages the linear unlock of 75M LIM tokens over 6 months and tracks fee revenue for liquidity and game treasury operations.
+/// @notice Manages a controlled linear unlock of 75 million LIM tokens over a 6-month period, ensuring fairness and minimizing rug-pull risk. This treasury will be used for rewards, gifts, offers, publicity campaigns, and other promotional initiatives related to gameplay and community engagement.
 contract GameTreasury is Ownable, AccessControl {
     using SafeERC20 for IERC20;
     bytes32 public constant POOL_LOADER_ROLE = keccak256("POOL_LOADER_ROLE");
@@ -93,7 +93,8 @@ contract GameTreasury is Ownable, AccessControl {
         emit FeeAdded(tokenAddress, amount, "gameTreasury");
     }
 
-    /// @notice Collect accumulated game fees to an address
+    /// @notice Collect accumulated game fees to an address.
+    /// These fees will be converted to LIM tokens and added to the gameFeeFund for future use.
     function collectGameFees(address tokenAddress, address to) external onlyOwner {
         uint256 amount = gameTreasuryFees[tokenAddress];
         require(amount > 0, "No game fees");
@@ -102,7 +103,8 @@ contract GameTreasury is Ownable, AccessControl {
         emit FeeCollected(tokenAddress, amount, "gameTreasury", to);
     }
 
-    /// @notice Collect accumulated liquidity fees to an address
+    /// @notice Collect accumulated liquidity fees to an address.
+    /// These fees will be converted to ETH and LIM, then added to the protocol’s Uniswap V4 liquidity pool.
     function collectLiquidityFees(address tokenAddress, address to) external onlyOwner {
         uint256 amount = liquidityPoolFees[tokenAddress];
         require(amount > 0, "No liquidity fees");

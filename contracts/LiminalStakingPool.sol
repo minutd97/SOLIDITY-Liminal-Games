@@ -7,13 +7,17 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @title Liminal Staking Pool (Shared Emissions, No Fees)
-/// @notice Fixed emissions per day, distributed proportionally to stake.
+/// @notice Emission starts at 380,000 LIM/day, decaying linearly to 100,000 over 30 days
 contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
     bytes32 public constant POOL_LOADER_ROLE = keccak256("POOL_LOADER_ROLE");
     IERC20 public immutable limToken;
 
     // Emission parameters
-    uint256 public rewardPerSecond;    // tokens emitted per second
+    uint256 public constant EMISSION_START = 4398148148148148148; // 380k/day
+    uint256 public constant EMISSION_END = 1157407407407407407;   // 100k/day
+    uint256 public constant EMISSION_DURATION = 30 days;
+
+    uint256 public immutable startTimestamp;
     uint256 public lastRewardTime;     // last timestamp the pool was updated
     uint256 public accRewardPerShare;  // accumulated reward-per-share, scaled by 1e12
 
@@ -29,28 +33,18 @@ contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
     mapping(address => StakeInfo) public stakes;
 
     event RewardLoaded(uint256 amount);
-    event EmissionRateUpdated(uint256 rewardPerSecond);
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
     event Claimed(address indexed user, uint256 reward);
 
-    /// @param _lim         Address of the LIM token
-    /// @param _dailyReward Tokens emitted per day
-    constructor(address _lim, uint256 _dailyReward) Ownable(msg.sender) {
+    /// @param _lim Address of the LIM token
+    constructor(address _lim) Ownable(msg.sender) {
         require(_lim != address(0), "Invalid token");
         limToken = IERC20(_lim);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
-        // Initialize emission rate and timestamp
-        rewardPerSecond = _dailyReward / 1 days;
+        startTimestamp = block.timestamp;
         lastRewardTime  = block.timestamp;
-    }
-
-    /// @notice Owner can adjust daily emissions
-    function setDailyEmission(uint256 dailyReward) external onlyOwner {
-        _updatePool();
-        rewardPerSecond = dailyReward / 1 days;
-        emit EmissionRateUpdated(rewardPerSecond);
     }
 
     /// @notice Loader deposits reward tokens into the pool
@@ -59,34 +53,6 @@ contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
         limToken.transferFrom(msg.sender, address(this), amount);
         rewardPool += amount;
         emit RewardLoaded(amount);
-    }
-
-    /// @dev Update pool accounting and distribute rewards
-    function _updatePool() internal {
-        if (block.timestamp <= lastRewardTime) return;
-        uint256 elapsed = block.timestamp - lastRewardTime;
-        if (totalStaked > 0) {
-            uint256 reward = elapsed * rewardPerSecond;
-            if (reward > rewardPool) {
-                reward = rewardPool;
-            }
-            rewardPool -= reward;
-            accRewardPerShare += (reward * 1e12) / totalStaked;
-        }
-        lastRewardTime = block.timestamp;
-    }
-
-    /// @notice View pending rewards for a user
-    function pendingReward(address user) external view returns (uint256) {
-        StakeInfo storage s = stakes[user];
-        uint256 _acc = accRewardPerShare;
-        if (block.timestamp > lastRewardTime && totalStaked > 0) {
-            uint256 elapsed = block.timestamp - lastRewardTime;
-            uint256 reward = elapsed * rewardPerSecond;
-            if (reward > rewardPool) reward = rewardPool;
-            _acc += (reward * 1e12) / totalStaked;
-        }
-        return (s.amount * _acc) / 1e12 - s.rewardDebt;
     }
 
     /// @notice Stake tokens to start earning
@@ -142,10 +108,48 @@ contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
         emit Claimed(msg.sender, pending);
     }
 
+    /// @dev Update pool accounting and distribute rewards
+    function _updatePool() internal {
+        if (block.timestamp <= lastRewardTime) return;
+        uint256 elapsed = block.timestamp - lastRewardTime;
+        if (totalStaked > 0) {
+            uint256 reward = elapsed * currentRewardPerSecond();
+            if (reward > rewardPool) {
+                reward = rewardPool;
+            }
+            rewardPool -= reward;
+            accRewardPerShare += (reward * 1e12) / totalStaked;
+        }
+        lastRewardTime = block.timestamp;
+    }
+
+    /// @notice View pending rewards for a user
+    function pendingReward(address user) external view returns (uint256) {
+        StakeInfo storage s = stakes[user];
+        uint256 _acc = accRewardPerShare;
+        if (block.timestamp > lastRewardTime && totalStaked > 0) {
+            uint256 elapsed = block.timestamp - lastRewardTime;
+            uint256 reward = elapsed * currentRewardPerSecond();
+            if (reward > rewardPool) reward = rewardPool;
+            _acc += (reward * 1e12) / totalStaked;
+        }
+        return (s.amount * _acc) / 1e12 - s.rewardDebt;
+    }
+
+    function currentRewardPerSecond() public view returns (uint256) {
+        uint256 elapsed = block.timestamp - startTimestamp;
+        if (elapsed >= EMISSION_DURATION) return EMISSION_END;
+
+        uint256 diff = EMISSION_START - EMISSION_END;
+        uint256 decayed = (diff * elapsed) / EMISSION_DURATION;
+        return EMISSION_START - decayed;
+    }
+
     /// @notice Manage loader role
     function grantLoaderRole(address account) external onlyOwner {
         grantRole(POOL_LOADER_ROLE, account);
     }
+
     function revokeLoaderRole(address account) external onlyOwner {
         revokeRole(POOL_LOADER_ROLE, account);
     }

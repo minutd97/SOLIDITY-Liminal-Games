@@ -50,9 +50,8 @@ contract LPStakingRewards is Ownable, IERC721Receiver, AccessControl, Reentrancy
         positionManager = IPositionManager(_positionManager);
     }
 
-    /// @notice Deposits LIM tokens into the reward fund (only accepted from LIM token contract)
-    function receiveRewardTokens(address from, uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
-        require(from == address(limToken), "Invalid reward token source");
+    /// @notice Deposits LIM tokens into the reward fund
+    function receiveRewardTokens(uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
         limToken.transferFrom(msg.sender, address(this), amount);
         rewardFund += amount;
     }

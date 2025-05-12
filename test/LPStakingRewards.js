@@ -215,7 +215,7 @@ describe("LP Staking Rewards full test with Uniswap V4 pool created", function (
 
     await limToken.approve(lpStakingRewards.target, ethers.parseUnits("35000000", 18));
     await lpStakingRewards.connect(owner).grantLoaderRole(owner.address);
-    await lpStakingRewards.receiveRewardTokens(limToken.target, ethers.parseUnits("35000000", 18));
+    await lpStakingRewards.receiveRewardTokens(ethers.parseUnits("35000000", 18));
 
     return { owner, user1, user2, presale, poolHelper, hookAddress, lpStakingRewards};
   }

@@ -136,6 +136,7 @@ contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
         return (s.amount * _acc) / 1e12 - s.rewardDebt;
     }
 
+    /// @notice Computes the current emission rate per second, based on elapsed time since staking started.
     function currentRewardPerSecond() public view returns (uint256) {
         uint256 elapsed = block.timestamp - startTimestamp;
         if (elapsed >= EMISSION_DURATION) return EMISSION_END;

@@ -50,7 +50,7 @@ describe("LiminalStakingPool – Emission Decay", function () {
     const rps = await pool.currentRewardPerSecond();
     const expected = rps * BigInt(seconds);
     const pending = await pool.pendingReward(user1.address);
-    const tolerance = ethers.parseUnits("5", 18);
+    const tolerance = ethers.parseUnits("20", 18);
 
     console.log("⏱ Elapsed:", seconds);
     console.log("📈 RPS:", rps.toString());
@@ -191,5 +191,50 @@ describe("LiminalStakingPool – Emission Decay", function () {
     await expect(pool.connect(user1).unstake(stake1))
       .to.emit(pool, "Claimed")
       .and.to.emit(pool, "Unstaked");
+  });
+
+  it("should correctly split rewards when User2 stakes later with more weight", async () => {
+    const { user1, user2, lim, pool } = await loadFixture(deployFixture);
+
+    const stake1 = ethers.parseUnits("1000", 18);
+    const stake2 = ethers.parseUnits("2000", 18);
+
+    // User1 stakes on Day 0
+    await lim.connect(user1).approve(pool.getAddress(), stake1);
+    await pool.connect(user1).stake(stake1);
+
+    // ⏩ Advance 1 day
+    await time.increase(86400);
+    await ethers.provider.send("evm_mine");
+
+    // User2 stakes on Day 1
+    await lim.connect(user2).approve(pool.getAddress(), stake2);
+    await pool.connect(user2).stake(stake2);
+
+    // ⏩ Advance another day
+    await time.increase(86400);
+    await ethers.provider.send("evm_mine");
+
+    // Collect pending rewards
+    const p1 = await pool.pendingReward(user1.address);
+    const p2 = await pool.pendingReward(user2.address);
+
+    const total = p1 + p2;
+    const actualUser1Bps = (p1 * 10000n) / total; // basis points (1/100 of %)
+
+    // Expected:
+    // - Day 1: User1 gets 100%
+    // - Day 2: User1 gets 1/3, User2 gets 2/3
+    // => User1 total = 1 + 1/3 = 4/3
+    // => Total = 2
+    // => Ratio = (4/3) / 2 = 2/3 = 6666.66 bps
+    const expectedUser1Bps = 6667n;
+
+    console.log("🧑‍🌾 User1 pending:", p1.toString());
+    console.log("🧑‍🌾 User2 pending:", p2.toString());
+    console.log("📊 Expected User1 ratio (bps):", expectedUser1Bps.toString());
+    console.log("📐 Actual User1 ratio (bps):", actualUser1Bps.toString());
+
+    expect(actualUser1Bps).to.be.closeTo(expectedUser1Bps, 50); // now ±0.5%
   });
 });

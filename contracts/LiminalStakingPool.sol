@@ -37,10 +37,10 @@ contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
     event Unstaked(address indexed user, uint256 amount);
     event Claimed(address indexed user, uint256 reward);
 
-    /// @param _lim Address of the LIM token
-    constructor(address _lim) Ownable(msg.sender) {
-        require(_lim != address(0), "Invalid token");
-        limToken = IERC20(_lim);
+    /// @param _limToken Address of the LIM token
+    constructor(address _limToken) Ownable(msg.sender) {
+        require(_limToken != address(0), "Invalid token");
+        limToken = IERC20(_limToken);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
         startTimestamp = block.timestamp;
@@ -48,7 +48,7 @@ contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
     }
 
     /// @notice Loader deposits reward tokens into the pool
-    function loadRewardPool(uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
+    function receiveRewardTokens(uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
         require(amount > 0, "Zero amount");
         limToken.transferFrom(msg.sender, address(this), amount);
         rewardPool += amount;

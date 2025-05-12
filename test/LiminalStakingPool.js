@@ -20,7 +20,7 @@ describe("LiminalStakingPool – Emission Decay", function () {
     const preload = ethers.parseUnits("40000000", 18);
     await pool.connect(owner).grantLoaderRole(owner.address);
     await lim.connect(owner).approve(pool.getAddress(), preload);
-    await pool.connect(owner).loadRewardPool(preload);
+    await pool.connect(owner).receiveRewardTokens(preload);
 
     // Distribute LIM to users
     const stake1 = ethers.parseUnits("1000", 18);
@@ -35,7 +35,7 @@ describe("LiminalStakingPool – Emission Decay", function () {
     const { stranger, lim, pool } = await loadFixture(deployFixture);
     const amt = ethers.parseUnits("100", 18);
     await lim.approve(await pool.getAddress(), amt);
-    await expect(pool.connect(stranger).loadRewardPool(amt)).to.be.reverted;
+    await expect(pool.connect(stranger).receiveRewardTokens(amt)).to.be.reverted;
   });
 
   it("should emit decaying rewards (12h stake)", async () => {

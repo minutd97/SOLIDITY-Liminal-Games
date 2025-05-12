@@ -4,6 +4,8 @@ pragma solidity ^0.8.20;
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
 interface ILiminalToken {
     function transfer(address to, uint256 amount) external returns (bool);
@@ -17,7 +19,9 @@ interface IPositionManager {
 }
 
 /// @title LP Staking Rewards - Stake Uniswap V4 LP NFTs to earn LIM with decay-based rewards
-contract LPStakingRewards is IERC721Receiver, ReentrancyGuard {
+contract LPStakingRewards is Ownable, IERC721Receiver, AccessControl, ReentrancyGuard {
+    bytes32 public constant POOL_LOADER_ROLE = keccak256("POOL_LOADER_ROLE");
+    
     ILiminalToken public immutable limToken; // Reward token distributed over time
     IPositionManager public immutable positionManager; // Uniswap V4 PositionManager (ERC721)
 
@@ -39,13 +43,15 @@ contract LPStakingRewards is IERC721Receiver, ReentrancyGuard {
     uint256 public rewardFund; // Total tokens available for reward distribution
  
     /// @notice Initializes the staking contract with the reward token and position manager
-    constructor(address _limToken, address _positionManager) {
+    constructor(address _limToken, address _positionManager) Ownable(msg.sender) {
+        require(_limToken != address(0), "Invalid token");
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         limToken = ILiminalToken(_limToken);
         positionManager = IPositionManager(_positionManager);
     }
 
     /// @notice Deposits LIM tokens into the reward fund (only accepted from LIM token contract)
-    function receiveRewardTokens(address from, uint256 amount) external {
+    function receiveRewardTokens(address from, uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
         require(from == address(limToken), "Invalid reward token source");
         limToken.transferFrom(msg.sender, address(this), amount);
         rewardFund += amount;
@@ -141,6 +147,15 @@ contract LPStakingRewards is IERC721Receiver, ReentrancyGuard {
         burnableRewards = 0;
         rewardFund -= toBurn;
         limToken.burn(toBurn);
+    }
+
+    /// @notice Manage loader role
+    function grantLoaderRole(address account) external onlyOwner {
+        grantRole(POOL_LOADER_ROLE, account);
+    }
+
+    function revokeLoaderRole(address account) external onlyOwner {
+        revokeRole(POOL_LOADER_ROLE, account);
     }
 
     /// @notice Accepts ERC721 safe transfers (required by Uniswap V4 positions)

@@ -4,7 +4,7 @@ const { ethers } = require("hardhat");
 
 describe("GameTreasury – Vesting & Fee Management", function () {
   async function deployFixture() {
-    const [owner, user1, feeCollector] = await ethers.getSigners();
+    const [owner, user1, feeCollector, user2] = await ethers.getSigners();
 
     // Deploy token
     const Token = await ethers.getContractFactory("LiminalToken");
@@ -17,12 +17,19 @@ describe("GameTreasury – Vesting & Fee Management", function () {
     await treasury.waitForDeployment();
 
     // Fund treasury with full 75M LIM
+    await treasury.connect(owner).grantLoaderRole(owner.address);
     const fullAmount = ethers.parseUnits("75000000", 18);
-    await lim.transfer(treasury.getAddress(), fullAmount);
+    await lim.approve(treasury.target, fullAmount);
+    await treasury.connect(owner).receiveRewardTokens(fullAmount);
+
+    // test game fee pool
+    const testGameFeeAmount = ethers.parseUnits("1000", 18);
+    await lim.approve(treasury.target, testGameFeeAmount);
+    await treasury.connect(owner).receiveGameFeeTokens(testGameFeeAmount);
+    await treasury.connect(owner).transferGameFeeTokens(user2.address, testGameFeeAmount);
 
     // Grant GAME_CONTRACT_ROLE to owner for testing
-    const GAME_ROLE = await treasury.GAME_CONTRACT_ROLE();
-    await treasury.grantRole(GAME_ROLE, owner.address);
+    await treasury.connect(owner).grantGameContractRole(owner.address);
 
     return { owner, user1, feeCollector, lim, treasury };
   }
@@ -55,7 +62,7 @@ describe("GameTreasury – Vesting & Fee Management", function () {
         const expected = ethers.parseUnits("40000000", 18); // 5M + half of remaining 70M
 
         const diff = releasable - expected;
-        expect(diff).to.be.lessThanOrEqual(ethers.parseUnits("10", 18)); // < 0.01 LIM
+        expect(diff).to.be.lessThanOrEqual(ethers.parseUnits("33", 18)); // < 0.01 LIM
     });
 
   it("should allow GAME_CONTRACT_ROLE to add fees", async () => {

@@ -22,6 +22,8 @@ contract GameTreasury is Ownable, AccessControl {
 
     uint256 public released;
 
+    uint256 public gameFeeFunds; // Additional unlocked tokens not part of the 75M totalAllocation
+
     mapping(address => uint256) public liquidityPoolFees;
     mapping(address => uint256) public gameTreasuryFees;
 
@@ -39,10 +41,29 @@ contract GameTreasury is Ownable, AccessControl {
         startTimestamp = block.timestamp;
     }
 
+    /// @notice Deposits totalAllocation of LIM tokens
+    function receiveRewardTokens(uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
+        limToken.transferFrom(msg.sender, address(this), amount);
+    }
+
+    /// @notice Adds fully unlocked game fee tokens
+    function receiveGameFeeTokens(uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
+        limToken.transferFrom(msg.sender, address(this), amount);
+        gameFeeFunds += amount;
+    }
+
     /// @notice Transfer unlocked tokens to an address
     function transferTokens(address to, uint256 amount) external onlyOwner {
         require(amount <= releasable(), "Insufficient unlocked tokens");
         released += amount;
+        limToken.safeTransfer(to, amount);
+        emit TokensTransferred(to, amount);
+    }
+
+    /// @notice Transfer gameFeeFunds tokens (separate from totalAllocation)
+    function transferGameFeeTokens(address to, uint256 amount) external onlyOwner {
+        require(amount <= gameFeeFunds, "Insufficient game fee fund");
+        gameFeeFunds -= amount;
         limToken.safeTransfer(to, amount);
         emit TokensTransferred(to, amount);
     }

@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SpiritToken} from "./SpiritToken.sol";
 
 /**
  * @title Spirit Token Factory
@@ -6,12 +11,6 @@
  *         while applying a fixed redemption fee. It manages a public reserve pool and tracks collected fees.
  *         Only the contract owner can adjust rates and collect protocol fees.
  */
-pragma solidity ^0.8.20;
-
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SpiritToken} from "./SpiritToken.sol";
-
 contract SpiritTokenFactory is Ownable {
     SpiritToken public immutable spirit; //The SPIRIT token instance
     uint256 public pegRate; // ETH-to-SPIRIT peg rate (wei per SPIRIT, e.g. 0.00004 ETH = 40000000000000 wei)

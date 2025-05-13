@@ -11,7 +11,7 @@ describe("AirdropDistributor", function () {
     const token = await Token.deploy();
     await token.waitForDeployment();
 
-    const totalReserves = await token.totalSupply();
+    const totalReserves = ethers.parseEther("10000000");
     const cliff = 30 * 24 * 60 * 60; // 30 days
     const duration = 182 * 24 * 60 * 60; // aprox. 6 months
 
@@ -45,7 +45,7 @@ describe("AirdropDistributor", function () {
   it("should allow claim and reset claimable balance", async () => {
     const { airdrop, token, user1, cliff } = await loadFixture(deployFixture);
     await time.increase(cliff + 100);
-    const claimAmount = ethers.parseEther("500");
+    const claimAmount = ethers.parseEther("50");
 
     await airdrop.setClaimable(user1.address, claimAmount);
     await airdrop.connect(user1).claim();

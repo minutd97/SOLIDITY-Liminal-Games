@@ -23,7 +23,12 @@ describe("FullTeamVesting", function () {
     await controller.grantFunderRole(deployer.address);
 
     console.log("\n⚙️ Setting vault release rates...");
-    await vault.setERC20ReleaseRate(await token.getAddress(), ethers.parseEther("100"));
+
+    const totalTokens = ethers.parseEther("30000000"); // 30 million tokens
+    const secondsInYear = 365 * 24 * 60 * 60;
+    const ratePerSecond = totalTokens / BigInt(secondsInYear);
+
+    await vault.setERC20ReleaseRate(await token.getAddress(), ratePerSecond);
     await vault.setETHReleaseRate(ethers.parseEther("1"));
 
     return { deployer, beneficiary1, beneficiary2, attacker, token, vault, controller };
@@ -58,8 +63,8 @@ describe("FullTeamVesting", function () {
     await time.increase(halfVestingAfterCliff);
 
     for (const beneficiary of [beneficiary1, beneficiary2]) {
-      const walletAddr = await controller.getVestingWallet(beneficiary.address);
-      const vestingWallet = await ethers.getContractAt("TeamVestingWallet", walletAddr);
+      //const walletAddr = await controller.getVestingWallet(beneficiary.address);
+      //const vestingWallet = await ethers.getContractAt("TeamVestingWallet", walletAddr);
 
       const releasableTokens = await controller.releasableAmountERC20(beneficiary.address, await token.getAddress());
       const releasableETH = await controller.releasableETH(beneficiary.address);

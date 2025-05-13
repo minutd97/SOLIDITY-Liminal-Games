@@ -23,7 +23,7 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: FORK_MAINNET ? "https://arb-mainnet.g.alchemy.com/v2/OwYoy7M5wwpmwDTPZU2xXgsWVDtqEcLJ" : "https://arb-sepolia.g.alchemy.com/v2/EidGXxMT55JClhVa0QdU3v0ZYnpPM9OC",
+        url: FORK_MAINNET ? process.env.ARBITRUM_MAINNET_PROV : process.env.ARBITRUM_TESTNET_PROV,
         //blockNumber: 321922670,
       },
       chainId: 31337,
@@ -37,11 +37,11 @@ module.exports = {
       chainId: 31337,
     },
     arbitrumOne: {
-      url: "https://arb1.arbitrum.io/rpc",
+      url: process.env.ARBITRUM_MAINNET_PROV,
       accounts: [`0x${process.env.MAINNET_PRIVATE_KEY}`],
     },
     arbitrumSepolia: {
-      url: "https://sepolia-rollup.arbitrum.io/rpc",
+      url: process.env.ARBITRUM_TESTNET_PROV,
       accounts: [`0x${process.env.TESTNET_PRIVATE_KEY}`],
     },
   },

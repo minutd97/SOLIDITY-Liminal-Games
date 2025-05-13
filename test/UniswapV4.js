@@ -151,13 +151,13 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
 
     const { salt, predicted, fullBytecode } = await findMatchingHookAddress(hookFactory.target, POOL_MANAGER);
 
-    console.log("V4HookFactory : ", hookFactory.target);
+    console.log("V4HookFactory :", hookFactory.target);
     //console.log("Will deploy V4Hook ↦", predicted, "with salt", salt);
     
     // CREATE V4 Hook Contract
     const tx = await hookFactory.create(fullBytecode, salt);
     await tx.wait();
-    console.log("V4Hook deployed correctly : ", predicted);
+    console.log("V4Hook deployed correctly :", predicted);
     hookAddress = predicted;
 
     // Deploy PoolHelper
@@ -174,8 +174,9 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
     console.log(`V4SwapHelper : ${swapHelper.target}`);
 
     // Deploy LiminalPresale
+    const minEthRequiered = ethers.parseEther("7");
     const LiminalPresale = await ethers.getContractFactory("LiminalPresale");
-    const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target);
+    const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target, minEthRequiered);
     await presale.waitForDeployment();
     console.log(`LiminalPresale : ${presale.target}`);
 

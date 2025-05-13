@@ -37,7 +37,7 @@ contract LPStakingRewards is Ownable, IERC721Receiver, AccessControl, Reentrancy
     }
 
     mapping(uint256 => StakeInfo) public stakes; // tokenId => staking info
-    uint256 public weeklyRewardAmount = 200_000 * 1e18; // Max weekly reward pool
+    uint256 public weeklyRewardAmount = 437_500 * 1e18; // Max weekly reward pool
     uint256 public totalStakedLiquidity; // Sum of all active NFT liquidities
     uint256 public burnableRewards; // Rewards decayed (non-claimable) but not yet burned
     uint256 public rewardFund; // Total tokens available for reward distribution

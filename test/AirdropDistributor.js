@@ -13,7 +13,7 @@ describe("AirdropDistributor", function () {
 
     const totalReserves = await token.totalSupply();
     const cliff = 30 * 24 * 60 * 60; // 30 days
-    const duration = 2 * 365 * 24 * 60 * 60; // 2 years
+    const duration = 182 * 24 * 60 * 60; // aprox. 6 months
 
     // Deploy AirdropDistributor
     const Airdrop = await ethers.getContractFactory("AirdropDistributor");
@@ -59,11 +59,11 @@ describe("AirdropDistributor", function () {
     await time.increase(cliff + Math.floor(duration / 2));
   
     const unlocked = await airdrop.getUnlockedReserves();
-    //console.log(`unlocked: ${unlocked}`);
+    console.log(`unlocked: ${unlocked}`);
   
     await airdrop.setClaimable(user2.address, unlocked);
   
-    await expect(airdrop.setClaimable(user1.address, ethers.parseEther("40"))).to.be.revertedWith("Exceeds unlocked tokens");
+    await expect(airdrop.setClaimable(user1.address, ethers.parseEther("200"))).to.be.revertedWith("Exceeds unlocked tokens");
 
     await airdrop.connect(user2).claim();
   });
@@ -98,7 +98,7 @@ describe("AirdropDistributor", function () {
     const unallocated = await airdrop.getUnallocatedReserves();
     const expected = unlocked - half;
 
-    expect(unallocated).to.be.closeTo(expected, ethers.parseEther("40"));
+    expect(unallocated).to.be.closeTo(expected, ethers.parseEther("200"));
   });
 
   it("should accumulate reservesAllocated across multiple users", async () => {

@@ -15,8 +15,8 @@ contract GameTreasury is Ownable, AccessControl {
 
     IERC20 public immutable limToken;
 
-    uint256 public immutable totalAllocation; // 75M tokens
-    uint256 public immutable upfrontUnlocked; // 5M tokens
+    uint256 public immutable totalAllocation;
+    uint256 public immutable upfrontUnlocked;
     uint256 public immutable startTimestamp; // Vesting start
     uint256 public immutable vestingDuration; // 6 months = 180 days
 
@@ -31,12 +31,12 @@ contract GameTreasury is Ownable, AccessControl {
     event FeeAdded(address indexed token, uint256 amount, string pool);
     event FeeCollected(address indexed token, uint256 amount, string pool, address to);
 
-    constructor(address _limToken) Ownable(msg.sender) {
+    constructor(address _limToken, uint256 _totalAllocation, uint256 _upfrontUnlocked) Ownable(msg.sender) {
         require(_limToken != address(0), "Invalid token");
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         limToken = IERC20(_limToken);
-        totalAllocation = 75_000_000 ether;
-        upfrontUnlocked = 5_000_000 ether;
+        totalAllocation = _totalAllocation;
+        upfrontUnlocked = _upfrontUnlocked;
         vestingDuration = 180 days;
         startTimestamp = block.timestamp;
     }

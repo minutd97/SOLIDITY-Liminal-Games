@@ -14,7 +14,7 @@ describe("LongTermReserve", function () {
     const upfront = ethers.parseEther("10000000"); // 10M
     const total = ethers.parseEther("30000000");   // 30M
     const cliff = 30 * 24 * 60 * 60;               // 1 month
-    const duration = 2 * 365 * 24 * 60 * 60;       // 2 years
+    const duration = 3 * 30 * 24 * 60 * 60;       // 3 months
 
     const reserve = await LongTermReserve.deploy(
       token.target,

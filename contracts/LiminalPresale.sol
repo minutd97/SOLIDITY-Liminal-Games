@@ -26,7 +26,7 @@ contract LiminalPresale is Ownable {
     LiminalToken public immutable limToken; // LiminalToken contract used for presale and liquidity
     address public immutable v4PoolHelper; // Address of the Uniswap V4 pool helper contract
     
-    uint256 public constant MIN_ETH_REQUIERED = 7 ether; // Minimum ETH required for presale to be valid
+    uint256 public immutable MIN_ETH_REQUIERED; // Minimum ETH required for presale to be valid
     uint256 public constant WALLET_MAX_CONTRIBUTION = 0.5 ether; // Maximum ETH a single wallet can contribute
     uint256 public constant WALLET_MIN_CONTRIBUTION = 0.02 ether; // Minimum ETH a single wallet must contribute
 
@@ -64,9 +64,10 @@ contract LiminalPresale is Ownable {
     /// @notice Initializes the presale contract with token and helper contract addresses
     /// @param _limToken The address of the LIM token contract
     /// @param _v4PoolHelper The address of the Uniswap V4 pool helper contract
-    constructor(address _limToken, address _v4PoolHelper) Ownable(msg.sender) {
+    constructor(address _limToken, address _v4PoolHelper, uint256 _minEthRequiered) Ownable(msg.sender) {
         limToken = LiminalToken(_limToken);
         v4PoolHelper = _v4PoolHelper;
+        MIN_ETH_REQUIERED = _minEthRequiered;
     }
 
     /// @notice Starts the presale with a given duration in seconds

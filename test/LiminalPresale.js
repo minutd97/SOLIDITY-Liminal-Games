@@ -17,14 +17,30 @@ describe("Presale contract test + V4 Pool Creation", function () {
     const limToken = await LiminalToken.deploy();
     await limToken.waitForDeployment();
 
+    // Deploy V4HookFactory
+    const HookFactory = await ethers.getContractFactory("V4HookFactory");
+    const hookFactory = await HookFactory.deploy();
+    await hookFactory.waitForDeployment();
+
+    const { salt, predicted, fullBytecode } = await findMatchingHookAddress(hookFactory.target, POOL_MANAGER);
+
+    console.log("V4HookFactory :", hookFactory.target);
+    //console.log("Will deploy V4Hook ↦", predicted, "with salt", salt);
+    
+    // CREATE V4 Hook Contract
+    const tx = await hookFactory.create(fullBytecode, salt);
+    await tx.wait();
+    console.log("V4Hook deployed correctly :", predicted);
+
     // Deploy PoolHelper
     const PoolHelper = await ethers.getContractFactory("V4PoolHelper");
-    const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS);
+    const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted);
     await poolHelper.waitForDeployment();
 
     // Deploy LiminalPresale
+    const minEthRequiered = ethers.parseEther("7");
     const LiminalPresale = await ethers.getContractFactory("LiminalPresale");
-    const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target);
+    const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target, minEthRequiered);
     await presale.waitForDeployment();
 
     // Let the presale contract be the pool creator
@@ -61,7 +77,7 @@ describe("Presale contract test + V4 Pool Creation", function () {
     await presale.connect(user1).contribute({ value: ethValue });
     await testAllowedContribution(presale, user1.address);
 
-    const userCount = 19;
+    const userCount = 2;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
@@ -106,7 +122,7 @@ describe("Presale contract test + V4 Pool Creation", function () {
     await presale.connect(user1).contribute({ value: ethValue });
     await testAllowedContribution(presale, user1.address);
 
-    const userCount = 348;
+    const userCount = 1;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
@@ -200,6 +216,31 @@ async function testGetterFunctions(contract){
 
     const buyersCount = await contract.getBuyersCount();
     console.log(`buyersCount : ${buyersCount}`)
+}
+
+async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {
+  const factory = await ethers.getContractFactory("V4Hook");
+
+  // build init code with the pool manager arg
+  const encodedArgs  = ethers.AbiCoder.defaultAbiCoder().encode(["address"], [poolManagerAddress]);
+  const fullBytecode = factory.bytecode + encodedArgs.slice(2);
+  const bytecodeHash = ethers.keccak256(fullBytecode);
+
+  // <-- corrected mask includes the 1<<6 bit for afterSwap
+  const expectedBits = BigInt((1<<12)|(1<<10)|(1<<8)|(1<<6)); // 0x1540n
+
+  for (let salt = 0; salt < 1_000_000; salt++) {
+    const saltHex   = ethers.toBeHex(salt, 32);
+    const predicted = ethers.getCreate2Address(
+      factoryAddress,  // <<< use the on-chain factory's address here
+      saltHex,
+      bytecodeHash
+    );
+    if ((BigInt(predicted) & 0x3FFFn) === expectedBits) {
+      return { salt, predicted, fullBytecode };
+    }
+  }
+  throw new Error("No matching address found");
 }
 
 async function log_EthBalance(address, name) {

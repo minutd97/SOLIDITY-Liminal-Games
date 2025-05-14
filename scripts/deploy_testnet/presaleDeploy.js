@@ -7,7 +7,7 @@ const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
 async function deploy() {
     try {
-        const provider = new ethers.JsonRpcProvider(process.env.ARBITRUM_TESTNET_PROV);
+        const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545"); //process.env.ARBITRUM_TESTNET_PROV
         const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
 
         console.log("🚀 Deploying contracts...");
@@ -15,13 +15,13 @@ async function deploy() {
         console.log(`________________________________________`);
 
         // Deploy LIM Token
-        const LiminalToken = await ethers.getContractFactory("LiminalToken");
+        const LiminalToken = await ethers.getContractFactory("LiminalToken", owner);
         const limToken = await LiminalToken.deploy();
         await limToken.waitForDeployment();
         console.log("LiminalToken :", limToken.target);
     
         // Deploy V4HookFactory
-        const HookFactory = await ethers.getContractFactory("V4HookFactory");
+        const HookFactory = await ethers.getContractFactory("V4HookFactory", owner);
         const hookFactory = await HookFactory.deploy();
         await hookFactory.waitForDeployment();
         console.log("V4HookFactory :", hookFactory.target);
@@ -33,19 +33,19 @@ async function deploy() {
         console.log("V4Hook deployed correctly :", predicted);
     
         // Deploy PoolHelper
-        const PoolHelper = await ethers.getContractFactory("V4PoolHelper");
+        const PoolHelper = await ethers.getContractFactory("V4PoolHelper", owner);
         const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted);
         await poolHelper.waitForDeployment();
         console.log("V4PoolHelper :", poolHelper.target);
     
         // Deploy LiminalPresale
         const minEthRequiered = ethers.parseEther("0.5");
-        const LiminalPresale = await ethers.getContractFactory("LiminalPresale");
+        const LiminalPresale = await ethers.getContractFactory("LiminalPresale", owner);
         const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target, minEthRequiered);
         await presale.waitForDeployment();
         console.log("LiminalPresale :", presale.target);
         // Let the presale contract be the pool creator
-        await poolHelper.grantCreatorRole(presale.target);
+        await poolHelper.connect(owner).grantCreatorRole(presale.target);
 
         // Deposit tokens to Liminal Presale Contract
         const tokensForPool = ethers.parseUnits("35000000", 18); // 35 mil LIM
@@ -59,14 +59,14 @@ async function deploy() {
 
         // Deploy LiminalDistributor and transfer 230M LIM to distributor
         const totalAmount = ethers.parseEther("230000000"); // 230M
-        const Distributor = await ethers.getContractFactory("LiminalDistributor");
+        const Distributor = await ethers.getContractFactory("LiminalDistributor", owner);
         const distributor = await Distributor.deploy(limToken.target);
         await distributor.waitForDeployment();
         console.log(`LiminalDistributor : ${distributor.target}`);
         await limToken.transfer(distributor.target, totalAmount);
     
         // Deploy LongTermReserve and transfer 30M LIM to reserve
-        const LongTermReserve = await ethers.getContractFactory("LongTermReserve");
+        const LongTermReserve = await ethers.getContractFactory("LongTermReserve", owner);
         const reserve_upfront = ethers.parseEther("10000000"); // 10M
         const reserve_total = ethers.parseEther("30000000");   // 30M
         const reserve_cliff = 30 * 24 * 60 * 60;               // 1 month
@@ -87,20 +87,20 @@ async function deploy() {
         const airdrop_reserves = ethers.parseEther("10000000"); // 10M
         const airdrop_cliff = 30 * 24 * 60 * 60; // 30 days
         const airdrop_duration = 182 * 24 * 60 * 60; // aprox. 6 months
-        const Airdrop = await ethers.getContractFactory("AirdropDistributor");
+        const Airdrop = await ethers.getContractFactory("AirdropDistributor", owner);
         const airdrop = await Airdrop.deploy(await limToken.getAddress(), airdrop_reserves, airdrop_cliff, airdrop_duration);
         await airdrop.waitForDeployment();
         console.log(`AirdropDistributor : ${airdrop.target}`);
         await limToken.transfer(await airdrop.getAddress(), airdrop_reserves);
 
         // Deploy TeamVestingController
-        const VestingController = await ethers.getContractFactory("TeamVestingController");
+        const VestingController = await ethers.getContractFactory("TeamVestingController", owner);
         const vestingController = await VestingController.deploy();
         await vestingController.waitForDeployment();
         console.log(`TeamVestingController : ${vestingController.target}`);
 
         // Deploy TeamVestingVault
-        const VestingVault = await ethers.getContractFactory("TeamVestingVault");
+        const VestingVault = await ethers.getContractFactory("TeamVestingVault", owner);
         const vestingVault = await VestingVault.deploy(await vestingController.getAddress());
         await vestingVault.waitForDeployment();
         console.log(`TeamVestingVault : ${vestingVault.target}`);

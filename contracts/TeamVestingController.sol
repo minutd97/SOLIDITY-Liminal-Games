@@ -18,6 +18,7 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
         address beneficiary;
         uint64 startTimestamp;
         uint64 duration;
+        bool funded;
     }
 
     mapping(address => VestingInfo) public vestingWallets;
@@ -54,7 +55,8 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
             wallet: address(wallet),
             beneficiary: beneficiary,
             startTimestamp: startTimestamp,
-            duration: duration
+            duration: duration,
+            funded: false
         });
 
         allVestingWallets.push(address(wallet));
@@ -64,19 +66,29 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
 
     /// @notice Transfers ERC20 tokens from the caller to the beneficiary's vesting wallet.
     function fundERC20ToWallet(address beneficiary, address token, uint256 amount) external onlyRole(WALLET_FUNDER_ROLE) {
-        address wallet = vestingWallets[beneficiary].wallet;
-        require(wallet != address(0), "Wallet not found");
-        bool success = IERC20(token).transferFrom(msg.sender, wallet, amount);
+        VestingInfo storage info = vestingWallets[beneficiary];
+        require(info.wallet != address(0), "Wallet not found");
+        require(!info.funded, "Wallet already funded");
+
+        info.funded = true;
+
+        bool success = IERC20(token).transferFrom(msg.sender, info.wallet, amount);
         require(success, "Token transfer failed");
+
         emit TokensFunded(beneficiary, token, amount);
     }
 
     /// @notice Sends native ETH to the beneficiary's vesting wallet.
     function fundETHToWallet(address beneficiary) external payable onlyRole(WALLET_FUNDER_ROLE) {
-        address wallet = vestingWallets[beneficiary].wallet;
-        require(wallet != address(0), "Wallet not found");
-        (bool success, ) = wallet.call{ value: msg.value }("");
+        VestingInfo storage info = vestingWallets[beneficiary];
+        require(info.wallet != address(0), "Wallet not found");
+        require(!info.funded, "Wallet already funded");
+
+        info.funded = true;
+
+        (bool success, ) = info.wallet.call{ value: msg.value }("");
         require(success, "ETH transfer failed");
+
         emit TokensFunded(beneficiary, address(0), msg.value);
     }
 

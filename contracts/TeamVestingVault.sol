@@ -25,6 +25,9 @@ contract TeamVestingVault is Ownable {
     mapping(address => ReleaseRate) public tokenReleaseRates; // token => release rule
     ReleaseRate public ethReleaseRate;
 
+    mapping(address => uint256) public upfrontUnlocked; // token => amount
+    uint256 public upfrontUnlockedETH;
+
     event TokensReleased(address indexed beneficiary, address indexed token, uint256 amount);
     event ETHReleased(address indexed beneficiary, uint256 amount);
 
@@ -34,46 +37,44 @@ contract TeamVestingVault is Ownable {
     }
 
     /// @notice Sets a one-time release rate for an ERC20 token in tokens per second.
-    function setERC20ReleaseRate(address token, uint256 ratePerSecond) external onlyOwner {
+    function setERC20ReleaseRate(address token, uint256 ratePerSecond, uint256 upfrontAmount) external onlyOwner {
         require(token != address(0), "Invalid token");
         require(ratePerSecond > 0, "Rate must be positive");
 
         ReleaseRate storage rate = tokenReleaseRates[token];
-        require(rate.startTime == 0, "Rate already set"); // cannot overwrite once set
+        require(rate.startTime == 0, "Rate already set");
 
         tokenReleaseRates[token] = ReleaseRate({
             ratePerSecond: ratePerSecond,
             startTime: uint64(block.timestamp),
             releasedSoFar: 0
         });
+
+        upfrontUnlocked[token] = upfrontAmount;
     }
 
     /// @notice Sets a one-time release rate for native ETH in wei per second.
-    function setETHReleaseRate(uint256 ratePerSecond) external onlyOwner {
+    function setETHReleaseRate(uint256 ratePerSecond, uint256 upfrontAmount) external onlyOwner {
         require(ratePerSecond > 0, "Rate must be positive");
-        require(ethReleaseRate.startTime == 0, "ETH rate already set"); // cannot overwrite once set
+        require(ethReleaseRate.startTime == 0, "ETH rate already set");
 
         ethReleaseRate = ReleaseRate({
             ratePerSecond: ratePerSecond,
             startTime: uint64(block.timestamp),
             releasedSoFar: 0
         });
+
+        upfrontUnlockedETH = upfrontAmount;
     }
 
     /// @notice Sends a specified amount of ERC20 tokens to the vesting controller for a given beneficiary, respecting release rate.
     function releaseTokensTo(address beneficiary, address token, uint256 amount) external onlyOwner {
         require(token != address(0), "Invalid token");
 
+        uint256 releasable = releasableTokenAmount(token);
+        require(amount <= releasable, "Amount exceeds releasable");
+
         ReleaseRate storage rate = tokenReleaseRates[token];
-        require(rate.startTime > 0, "Token rate not set");
-
-        uint256 elapsed = block.timestamp - rate.startTime;
-        uint256 maxAllowed = elapsed * rate.ratePerSecond;
-        require(rate.releasedSoFar + amount <= maxAllowed, "Exceeds token release rate");
-
-        uint256 balance = IERC20(token).balanceOf(address(this));
-        require(amount <= balance, "Insufficient token balance");
-
         rate.releasedSoFar += amount;
         totalTokensFunded[token] += amount;
 
@@ -85,13 +86,8 @@ contract TeamVestingVault is Ownable {
 
     /// @notice Sends a specified amount of ETH to the vesting controller for a given beneficiary, respecting release rate.
     function releaseETHTo(address beneficiary, uint256 amount) external onlyOwner {
-        require(ethReleaseRate.startTime > 0, "ETH rate not set");
-
-        uint256 elapsed = block.timestamp - ethReleaseRate.startTime;
-        uint256 maxAllowed = elapsed * ethReleaseRate.ratePerSecond;
-        require(ethReleaseRate.releasedSoFar + amount <= maxAllowed, "Exceeds ETH release rate");
-
-        require(amount <= address(this).balance, "Insufficient ETH");
+        uint256 releasable = releasableETHAmount();
+        require(amount <= releasable, "Amount exceeds releasable");
 
         ethReleaseRate.releasedSoFar += amount;
 
@@ -100,12 +96,12 @@ contract TeamVestingVault is Ownable {
     }
 
     /// @notice Returns the current amount of ERC20 tokens available to be released based on the release rate and elapsed time.
-    function releasableTokenAmount(address token) external view returns (uint256) {
+    function releasableTokenAmount(address token) public view returns (uint256) {
         ReleaseRate memory rate = tokenReleaseRates[token];
         if (rate.startTime == 0) return 0;
 
         uint256 elapsed = block.timestamp - rate.startTime;
-        uint256 maxAllowed = elapsed * rate.ratePerSecond;
+        uint256 maxAllowed = (elapsed * rate.ratePerSecond) + upfrontUnlocked[token];
 
         if (maxAllowed <= rate.releasedSoFar) return 0;
 
@@ -115,12 +111,12 @@ contract TeamVestingVault is Ownable {
     }
 
     /// @notice Returns the current amount of ETH available to be released based on the release rate and elapsed time.
-    function releasableETHAmount() external view returns (uint256) {
+    function releasableETHAmount() public view returns (uint256) {
         ReleaseRate memory rate = ethReleaseRate;
         if (rate.startTime == 0) return 0;
 
         uint256 elapsed = block.timestamp - rate.startTime;
-        uint256 maxAllowed = elapsed * rate.ratePerSecond;
+        uint256 maxAllowed = (elapsed * rate.ratePerSecond) + upfrontUnlockedETH;
 
         if (maxAllowed <= rate.releasedSoFar) return 0;
 

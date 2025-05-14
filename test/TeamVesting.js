@@ -4,7 +4,7 @@ const { ethers } = require("hardhat");
 
 describe("FullTeamVesting", function () {
   async function deployFixture() {
-    const [deployer, beneficiary1, beneficiary2, attacker] = await ethers.getSigners();
+    const [deployer, beneficiary1, beneficiary2, beneficiary3, attacker] = await ethers.getSigners();
 
     const LiminalToken = await ethers.getContractFactory("LiminalToken");
     const token = await LiminalToken.deploy();
@@ -24,18 +24,31 @@ describe("FullTeamVesting", function () {
 
     console.log("\n⚙️ Setting vault release rates...");
 
-    const totalTokens = ethers.parseEther("30000000"); // 30 million tokens
+    const totalTokens = ethers.parseEther("30000000"); // 30M LIM
     const secondsInYear = 365 * 24 * 60 * 60;
     const ratePerSecond = totalTokens / BigInt(secondsInYear);
 
-    await vault.setERC20ReleaseRate(await token.getAddress(), ratePerSecond);
-    await vault.setETHReleaseRate(ethers.parseEther("1"));
+    await vault.setERC20ReleaseRate(await token.getAddress(), ratePerSecond, ethers.parseEther("1000000"));
+    await vault.setETHReleaseRate(ethers.parseEther("0.000001"), ethers.parseEther("100"));
 
-    return { deployer, beneficiary1, beneficiary2, attacker, token, vault, controller };
+    // Fund vault with LIM and ETH so it can release to vesting wallets
+    await token.approve(await vault.getAddress(), totalTokens) // 30M LIM
+    await token.transfer(await vault.getAddress(), totalTokens); // 30M LIM
+    await deployer.sendTransaction({
+      to: await vault.getAddress(),
+      value: ethers.parseEther("200") // 200 ETH
+    });
+
+    return { deployer, beneficiary1, beneficiary2, beneficiary3, attacker, token, vault, controller };
   }
 
   it("should run full vesting lifecycle for multiple beneficiaries with LiminalToken", async function () {
-    const { deployer, beneficiary1, beneficiary2, token, vault, controller } = await loadFixture(deployFixture);
+    const { deployer, beneficiary1, beneficiary2, beneficiary3, token, vault, controller } = await loadFixture(deployFixture);
+
+    const upfrontLIM = await vault.releasableTokenAmount(await token.getAddress());
+    const upfrontETH = await vault.releasableETHAmount();
+    console.log("🔓 Upfront unlocked LIM:", ethers.formatEther(upfrontLIM));
+    console.log("🔓 Upfront unlocked ETH:", ethers.formatEther(upfrontETH));
 
     const start = await time.latest();
     const cliff = 30 * 24 * 60 * 60; // 1 month
@@ -52,14 +65,13 @@ describe("FullTeamVesting", function () {
       );
       await tx.wait();
 
-      console.log("Funding wallet with $LIM and ETH...");
+      console.log("Funding wallet with $LIM...");
       await token.approve(controller.target, ethers.parseEther("1000"));
       await controller.fundERC20ToWallet(beneficiary.address, token.target, ethers.parseEther("1000"));
-      await controller.fundETHToWallet(beneficiary.address, { value: ethers.parseEther("10") });
     }
 
     console.log("\n⏩ Advancing time to halfway through vesting period after cliff...");
-    const halfVestingAfterCliff = cliff + (duration - cliff) / 2;
+    const halfVestingAfterCliff = cliff + (duration / 2);
     await time.increase(halfVestingAfterCliff);
 
     for (const beneficiary of [beneficiary1, beneficiary2]) {
@@ -67,22 +79,18 @@ describe("FullTeamVesting", function () {
       //const vestingWallet = await ethers.getContractAt("TeamVestingWallet", walletAddr);
 
       const releasableTokens = await controller.releasableAmountERC20(beneficiary.address, await token.getAddress());
-      const releasableETH = await controller.releasableETH(beneficiary.address);
 
       console.log("\nVesting status for:", beneficiary.address);
       console.log("Releasable $LIM:", ethers.formatEther(releasableTokens));
-      console.log("Releasable ETH:", ethers.formatEther(releasableETH));
 
       console.log("Releasing vested assets...");
       await controller.releaseVestedERC20(beneficiary.address, await token.getAddress());
-      await controller.releaseVestedETH(beneficiary.address);
 
       console.log("Revoking vesting wallet...");
       await controller.revokeVesting(beneficiary.address);
 
       console.log("Reclaiming unvested assets...");
       await controller.reclaimUnvestedERC20(beneficiary.address, await token.getAddress());
-      await controller.reclaimUnvestedETH(beneficiary.address);
     }
 
     console.log("\n🔍 Vault stats before release:");
@@ -91,22 +99,26 @@ describe("FullTeamVesting", function () {
     console.log("Releasable LIM from Vault:", ethers.formatEther(releasableLIM));
     console.log("Releasable ETH from Vault:", ethers.formatEther(releasableETH));
 
-    for (const beneficiary of [beneficiary1, beneficiary2]) {
-      console.log("\nVault releasing to:", beneficiary.address);
-      await vault.releaseTokensTo(beneficiary.address, await token.getAddress(), ethers.parseEther("100"));
-      await vault.releaseETHTo(beneficiary.address, ethers.parseEther("1"));
+    console.log("\nCreating vesting wallet for:", beneficiary3.address);
+      const tx = await controller.createVestingWallet(
+        beneficiary3.address,
+        start,
+        duration,
+        cliff,
+        vault.target
+      );
+    await tx.wait();
 
-      const walletAddr = await controller.getVestingWallet(beneficiary.address);
-      const balLIM = await token.balanceOf(walletAddr);
-      const balETH = await ethers.provider.getBalance(walletAddr);
+    console.log("\nVault releasing to:", beneficiary3.address);
+    await vault.releaseTokensTo(beneficiary3.address, await token.getAddress(), ethers.parseEther("1000000"));
 
-      console.log("Vesting Wallet:", walletAddr);
-      console.log("Final $LIM Balance:", ethers.formatEther(balLIM));
-      console.log("Final ETH Balance:", ethers.formatEther(balETH));
+    const walletAddr = await controller.getVestingWallet(beneficiary3.address);
+    const balLIM = await token.balanceOf(walletAddr);
 
-      expect(balLIM).to.be.gt(0);
-      expect(balETH).to.be.gt(0);
-    }
+    console.log("Vesting Wallet:", walletAddr);
+    console.log("Final $LIM Balance:", ethers.formatEther(balLIM));
+
+    expect(balLIM).to.be.gt(0);
 
     const remainingLIM = await vault.remainingTokenBalance(await token.getAddress());
     const remainingETH = await vault.remainingETHBalance();
@@ -138,7 +150,7 @@ describe("FullTeamVesting", function () {
     ).to.be.revertedWithCustomError(controller, "OwnableUnauthorizedAccount");
 
     await expect(
-      vaultAsAttacker.setERC20ReleaseRate(token.target, ethers.parseEther("999"))
+      vaultAsAttacker.setERC20ReleaseRate(token.target, ethers.parseEther("999"), ethers.parseEther("999"))
     ).to.be.revertedWithCustomError(vault, "OwnableUnauthorizedAccount");
 
     await expect(

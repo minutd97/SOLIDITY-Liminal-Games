@@ -24,16 +24,17 @@ describe("FullTeamVesting", function () {
 
     console.log("\n⚙️ Setting vault release rates...");
 
-    const totalTokens = ethers.parseEther("30000000"); // 30M LIM
+    const vesting_vault_reserve_upfront = ethers.parseEther("10000000"); // 10M
+    const vesting_vault_reserve = ethers.parseEther("30000000"); // 30M
     const secondsInYear = 365 * 24 * 60 * 60;
-    const ratePerSecond = totalTokens / BigInt(secondsInYear);
+    const ratePerSecond = vesting_vault_reserve / BigInt(secondsInYear);
 
-    await vault.setERC20ReleaseRate(await token.getAddress(), ratePerSecond, ethers.parseEther("1000000"));
+    await vault.setERC20ReleaseRate(await token.getAddress(), ratePerSecond, vesting_vault_reserve_upfront);
     await vault.setETHReleaseRate(ethers.parseEther("0.000001"), ethers.parseEther("100"));
 
     // Fund vault with LIM and ETH so it can release to vesting wallets
-    await token.approve(await vault.getAddress(), totalTokens) // 30M LIM
-    await token.transfer(await vault.getAddress(), totalTokens); // 30M LIM
+    await token.approve(await vault.getAddress(), vesting_vault_reserve + vesting_vault_reserve_upfront) // 40M LIM
+    await token.transfer(await vault.getAddress(), vesting_vault_reserve + vesting_vault_reserve_upfront); // 40M LIM
     await deployer.sendTransaction({
       to: await vault.getAddress(),
       value: ethers.parseEther("200") // 200 ETH
@@ -41,6 +42,24 @@ describe("FullTeamVesting", function () {
 
     return { deployer, beneficiary1, beneficiary2, beneficiary3, attacker, token, vault, controller };
   }
+
+  it("should fully release vault tokens after a one year period", async function () {
+    const { deployer, beneficiary1, beneficiary2, beneficiary3, token, vault, controller } = await loadFixture(deployFixture);
+    const upfrontLIM = await vault.releasableTokenAmount(await token.getAddress());
+    const upfrontETH = await vault.releasableETHAmount();
+    console.log("🔓 Upfront unlocked LIM:", ethers.formatEther(upfrontLIM));
+    console.log("🔓 Upfront unlocked ETH:", ethers.formatEther(upfrontETH));
+
+    const releasableLIM = await vault.releasableTokenAmount(await token.getAddress());
+    console.log("Releasable LIM from Vault:", ethers.formatEther(releasableLIM));
+
+    //const start = await time.latest();
+    const duration = 365 * 24 * 60 * 60; // 12 months
+    await time.increase(duration);
+
+    const releasableLIM2 = await vault.releasableTokenAmount(await token.getAddress());
+    console.log("Releasable LIM from Vault:", ethers.formatEther(releasableLIM2));
+  });
 
   it("should run full vesting lifecycle for multiple beneficiaries with LiminalToken", async function () {
     const { deployer, beneficiary1, beneficiary2, beneficiary3, token, vault, controller } = await loadFixture(deployFixture);

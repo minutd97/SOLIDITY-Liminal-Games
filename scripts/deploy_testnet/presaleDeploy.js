@@ -48,7 +48,7 @@ async function deploy() {
          `Fund the LiminalDistributor with ${ethers.formatEther(totalAmount)} LIM in total`);
     
         // Deploy LongTermReserve and transfer 30M LIM to reserve
-        const reserve_upfront = ethers.parseEther("10000000"); // 10M
+        const reserve_upfront = ethers.parseEther("5000000"); // 5M
         const reserve_total = ethers.parseEther("30000000");   // 30M
         const reserve_cliff = 30 * 24 * 60 * 60;               // 1 month
         const reserve_duration = 3 * 30 * 24 * 60 * 60;       // 3 months
@@ -86,7 +86,7 @@ async function deploy() {
         const vesting_start = vesting_block.timestamp;
         const vesting_duration = 365 * 24 * 60 * 60; // 12 months
         const vesting_cliff = 30 * 24 * 60 * 60; // 1 month
-        const vesting_beneficiary_half = ethers.parseEther("15000000"); // 15M
+        const vesting_beneficiary_half = ethers.parseEther("10000000"); // 10M
     
         const beneficiary1 = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
         const beneficiary2 = "0x4921A22EFe83c87E2e6135565A797F5914FB931E";
@@ -110,14 +110,16 @@ async function deploy() {
         console.log("\n");
 
         // Fund the vesting with the remaining token reserve with a linear realease
+        const vesting_vault_reserve_upfront = ethers.parseEther("10000000"); // 10M
         const vesting_vault_reserve = ethers.parseEther("30000000"); // 30M
         const secondsInYear = 365 * 24 * 60 * 60;
         const vault_ratePerSecond = vesting_vault_reserve / BigInt(secondsInYear); // 30M tokens over 365 days (18 decimals)
-        await sendTx(vestingVault.connect(owner).setERC20ReleaseRate(limToken.target, vault_ratePerSecond),
+        await sendTx(vestingVault.connect(owner).setERC20ReleaseRate(limToken.target, vault_ratePerSecond, vesting_vault_reserve_upfront),
          `Set the ERC20 release rate for ${limToken.target}`);
 
-        await sendTx(limToken.approve(vestingVault.target, vesting_vault_reserve), `Approve ${ethers.formatEther(vesting_vault_reserve)} LIM tokens to TeamVestingVault`);
-        await sendTx(limToken.transfer(vestingVault.target, vesting_vault_reserve), `Transfer ${ethers.formatEther(vesting_vault_reserve)} LIM tokens to TeamVestingVault`);
+        const totalVaultReserves = vesting_vault_reserve + vesting_vault_reserve_upfront;
+        await sendTx(limToken.approve(vestingVault.target, totalVaultReserves), `Approve ${ethers.formatEther(totalVaultReserves)} LIM tokens to TeamVestingVault`);
+        await sendTx(limToken.transfer(vestingVault.target, totalVaultReserves), `Transfer ${ethers.formatEther(totalVaultReserves)} LIM tokens to TeamVestingVault`);
 
         await log_TokenBalance(limToken, "LIM", owner.address, "Owner");
         console.log("✅ Deployment Succeded !");

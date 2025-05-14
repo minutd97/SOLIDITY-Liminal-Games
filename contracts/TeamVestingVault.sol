@@ -13,7 +13,7 @@ interface ITeamVestingController {
 /// @notice Stores and releases tokens to TeamVestingController wallets over time, with rate limits per token.
 /// @dev Supports rate-limited release of ETH and ERC20 tokens to beneficiaries through the controller.
 contract TeamVestingVault is Ownable {
-    address public immutable teamVestingManager;
+    address public immutable teamVestingController;
 
     struct ReleaseRate {
         uint256 ratePerSecond;
@@ -28,9 +28,9 @@ contract TeamVestingVault is Ownable {
     event TokensReleased(address indexed beneficiary, address indexed token, uint256 amount);
     event ETHReleased(address indexed beneficiary, uint256 amount);
 
-    constructor(address _teamVestingManager) Ownable(msg.sender) {
-        require(_teamVestingManager != address(0), "Invalid manager");
-        teamVestingManager = _teamVestingManager;
+    constructor(address _teamVestingController) Ownable(msg.sender) {
+        require(_teamVestingController != address(0), "Invalid controller");
+        teamVestingController = _teamVestingController;
     }
 
     /// @notice Sets a one-time release rate for an ERC20 token in tokens per second.
@@ -77,8 +77,8 @@ contract TeamVestingVault is Ownable {
         rate.releasedSoFar += amount;
         totalTokensFunded[token] += amount;
 
-        IERC20(token).approve(teamVestingManager, amount);
-        ITeamVestingController(teamVestingManager).fundERC20ToWallet(beneficiary, token, amount);
+        IERC20(token).approve(teamVestingController, amount);
+        ITeamVestingController(teamVestingController).fundERC20ToWallet(beneficiary, token, amount);
 
         emit TokensReleased(beneficiary, token, amount);
     }
@@ -95,7 +95,7 @@ contract TeamVestingVault is Ownable {
 
         ethReleaseRate.releasedSoFar += amount;
 
-        ITeamVestingController(teamVestingManager).fundETHToWallet{ value: amount }(beneficiary);
+        ITeamVestingController(teamVestingController).fundETHToWallet{ value: amount }(beneficiary);
         emit ETHReleased(beneficiary, amount);
     }
 

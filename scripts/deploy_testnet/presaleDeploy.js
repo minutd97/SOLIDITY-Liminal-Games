@@ -10,104 +10,76 @@ async function deploy() {
         const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545"); //process.env.ARBITRUM_TESTNET_PROV
         const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
 
-        console.log("🚀 Deploying contracts...");
+        console.log("\n🚀 Deploying contracts...");
         console.log(`Contracts Owner : ${owner.address}`);
-        console.log(`________________________________________`);
 
         // Deploy LIM Token
-        const LiminalToken = await ethers.getContractFactory("LiminalToken", owner);
-        const limToken = await LiminalToken.deploy();
-        await limToken.waitForDeployment();
-        console.log("LiminalToken :", limToken.target);
+        const limToken = await deployContract("LiminalToken", owner);
     
         // Deploy V4HookFactory
-        const HookFactory = await ethers.getContractFactory("V4HookFactory", owner);
-        const hookFactory = await HookFactory.deploy();
-        await hookFactory.waitForDeployment();
-        console.log("V4HookFactory :", hookFactory.target);
+        const hookFactory = await deployContract("V4HookFactory", owner);
         
         // CREATE V4 Hook Contract
         const { salt, predicted, fullBytecode } = await findMatchingHookAddress(hookFactory.target, POOL_MANAGER);
-        const tx = await hookFactory.create(fullBytecode, salt);
-        await tx.wait();
+        // This will auto-await tx + wait
+        await sendTx(hookFactory.create(fullBytecode, salt), "Create V4 Hook");
         console.log("V4Hook deployed correctly :", predicted);
     
         // Deploy PoolHelper
-        const PoolHelper = await ethers.getContractFactory("V4PoolHelper", owner);
-        const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted);
-        await poolHelper.waitForDeployment();
-        console.log("V4PoolHelper :", poolHelper.target);
+        const poolHelper = await deployContract("V4PoolHelper", owner, [POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted]);
     
         // Deploy LiminalPresale
         const minEthRequiered = ethers.parseEther("0.5");
-        const LiminalPresale = await ethers.getContractFactory("LiminalPresale", owner);
-        const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target, minEthRequiered);
-        await presale.waitForDeployment();
-        console.log("LiminalPresale :", presale.target);
+        const presale = await deployContract("LiminalPresale", owner, [limToken.target, poolHelper.target, minEthRequiered]);
         // Let the presale contract be the pool creator
-        await poolHelper.connect(owner).grantCreatorRole(presale.target);
+        await sendTx(poolHelper.connect(owner).grantCreatorRole(presale.target), "Grant pool creator role for presale contract");
 
         // Deposit tokens to Liminal Presale Contract
         const tokensForPool = ethers.parseUnits("35000000", 18); // 35 mil LIM
-        await limToken.connect(owner).approve(presale.target, tokensForPool)
-        await presale.connect(owner).depositPoolTokens(tokensForPool);
-    
         const tokensForPresale = ethers.parseUnits("35000000", 18); // 35 mil LIM
-        await limToken.connect(owner).approve(presale.target, tokensForPresale)
-        await presale.connect(owner).depositPresaleTokens(tokensForPresale);
-        //console.log(`✅ Tokens deposited to Liminal Presale Contract`);
+        await sendTx(limToken.connect(owner).approve(presale.target, tokensForPool + tokensForPresale), "Approve total amount of tokens to presale contract");
+        await sendTx(presale.connect(owner).depositPoolTokens(tokensForPool), "Deposit pool tokens for uniswap v4 pool");
+        await sendTx(presale.connect(owner).depositPresaleTokens(tokensForPresale), "Deposit presale tokens for users");
 
         // Deploy LiminalDistributor and transfer 230M LIM to distributor
         const totalAmount = ethers.parseEther("230000000"); // 230M
-        const Distributor = await ethers.getContractFactory("LiminalDistributor", owner);
-        const distributor = await Distributor.deploy(limToken.target);
-        await distributor.waitForDeployment();
-        console.log(`LiminalDistributor : ${distributor.target}`);
-        await limToken.transfer(distributor.target, totalAmount);
+        const distributor = await deployContract("LiminalDistributor", owner, [limToken.target]);
+        await sendTx(limToken.transfer(distributor.target, totalAmount),
+         `Fund the LiminalDistributor with ${ethers.formatEther(totalAmount)} LIM in total`);
     
         // Deploy LongTermReserve and transfer 30M LIM to reserve
-        const LongTermReserve = await ethers.getContractFactory("LongTermReserve", owner);
         const reserve_upfront = ethers.parseEther("10000000"); // 10M
         const reserve_total = ethers.parseEther("30000000");   // 30M
         const reserve_cliff = 30 * 24 * 60 * 60;               // 1 month
         const reserve_duration = 3 * 30 * 24 * 60 * 60;       // 3 months
-        const reserve = await LongTermReserve.deploy(
-            limToken.target,
-            owner.address,
-            reserve_upfront,
-            reserve_total,
-            reserve_cliff,
+        const reserve = await deployContract("LongTermReserve", owner, [
+            limToken.target, 
+            owner.address, 
+            reserve_upfront, 
+            reserve_total, 
+            reserve_cliff, 
             reserve_duration
-        );
-        await reserve.waitForDeployment();
-        console.log(`LongTermReserve : ${reserve.target}`);
-        await limToken.transfer(reserve.target, reserve_total); // Fund the reserve with the full 30M LIM
+        ]);
+        await sendTx(limToken.transfer(reserve.target, reserve_total),
+         `Fund the LongTermReserve with ${ethers.formatEther(reserve_total)} LIM in total`);
 
         // Deploy AirdropDistributor and transfer 10M LIM to airdrop
         const airdrop_reserves = ethers.parseEther("10000000"); // 10M
         const airdrop_cliff = 30 * 24 * 60 * 60; // 30 days
         const airdrop_duration = 182 * 24 * 60 * 60; // aprox. 6 months
-        const Airdrop = await ethers.getContractFactory("AirdropDistributor", owner);
-        const airdrop = await Airdrop.deploy(await limToken.getAddress(), airdrop_reserves, airdrop_cliff, airdrop_duration);
-        await airdrop.waitForDeployment();
-        console.log(`AirdropDistributor : ${airdrop.target}`);
-        await limToken.transfer(await airdrop.getAddress(), airdrop_reserves);
+        const airdrop = await deployContract("AirdropDistributor", owner, [limToken.target, airdrop_reserves, airdrop_cliff, airdrop_duration]);
+        await sendTx(limToken.transfer(airdrop.target, airdrop_reserves),
+         `Fund the AirdropDistributor with ${ethers.formatEther(airdrop_reserves)} LIM in total`);
 
         // Deploy TeamVestingController
-        const VestingController = await ethers.getContractFactory("TeamVestingController", owner);
-        const vestingController = await VestingController.deploy();
-        await vestingController.waitForDeployment();
-        console.log(`TeamVestingController : ${vestingController.target}`);
+        const vestingController = await deployContract("TeamVestingController", owner);
 
         // Deploy TeamVestingVault
-        const VestingVault = await ethers.getContractFactory("TeamVestingVault", owner);
-        const vestingVault = await VestingVault.deploy(await vestingController.getAddress());
-        await vestingVault.waitForDeployment();
-        console.log(`TeamVestingVault : ${vestingVault.target}`);
+        const vestingVault = await deployContract("TeamVestingVault", owner, [vestingController.target]);
 
         // Grant funder role for vault and deployer
-        await vestingController.grantFunderRole(vestingVault.target);
-        await vestingController.grantFunderRole(owner.address);
+        await sendTx(vestingController.grantFunderRole(vestingVault.target), `Grant funder role for TeamVestingVault`);
+        await sendTx(vestingController.grantFunderRole(owner.address), `Grant funder role for contract Owner`);
 
         // Fund initial vesting wallets
         const vesting_block = await ethers.provider.getBlock("latest");
@@ -121,35 +93,56 @@ async function deploy() {
 
         for (const beneficiary of [beneficiary1, beneficiary2]) {
             console.log("\nCreating vesting wallet for:", beneficiary);
-            const tx = await vestingController.createVestingWallet(
+            await sendTx(vestingController.createVestingWallet(
                 beneficiary,
                 vesting_start,
                 vesting_duration,
                 vesting_cliff,
                 vestingVault.target
-            );
-            await tx.wait();
+            ), `Creating vesting wallet for: ${beneficiary}`);
     
-            console.log(`Funding wallet with ${vesting_beneficiary_half} LIM`);
-            await limToken.approve(vestingController.target, vesting_beneficiary_half);
-            await vestingController.connect(owner).fundERC20ToWallet(beneficiary, limToken.target, vesting_beneficiary_half);
+            await sendTx(limToken.approve(vestingController.target, vesting_beneficiary_half),
+             `Approve LIM tokens ${ethers.formatEther(vesting_beneficiary_half)} to TeamVestingController`);
+
+            await sendTx(vestingController.connect(owner).fundERC20ToWallet(beneficiary, limToken.target, vesting_beneficiary_half),
+             `Fund beneficiary : ${beneficiary} , with LIM tokens ${ethers.formatEther(vesting_beneficiary_half)}`);
         }
+        console.log("\n");
 
         // Fund the vesting with the remaining token reserve with a linear realease
         const vesting_vault_reserve = ethers.parseEther("30000000"); // 30M
         const secondsInYear = 365 * 24 * 60 * 60;
         const vault_ratePerSecond = vesting_vault_reserve / BigInt(secondsInYear); // 30M tokens over 365 days (18 decimals)
-        await vestingVault.setERC20ReleaseRate(await limToken.getAddress(), vault_ratePerSecond);
-        await limToken.approve(vestingVault.target, vesting_vault_reserve);
-        await limToken.transfer(vestingVault.target, vesting_vault_reserve);
+        await sendTx(vestingVault.connect(owner).setERC20ReleaseRate(limToken.target, vault_ratePerSecond),
+         `Set the ERC20 release rate for ${limToken.target}`);
 
-        console.log(`________________________________________`);
+        await sendTx(limToken.approve(vestingVault.target, vesting_vault_reserve), `Approve ${ethers.formatEther(vesting_vault_reserve)} LIM tokens to TeamVestingVault`);
+        await sendTx(limToken.transfer(vestingVault.target, vesting_vault_reserve), `Transfer ${ethers.formatEther(vesting_vault_reserve)} LIM tokens to TeamVestingVault`);
+
         await log_TokenBalance(limToken, "LIM", owner.address, "Owner");
+        console.log("✅ Deployment Succeded !");
         process.exit(0);
     } catch (error) {
         console.error("❌ Deployment failed:", error);
         process.exit(1);
     }
+}
+
+async function deployContract(name, signer, args = []) {
+  const Factory = await ethers.getContractFactory(name, signer);
+  const contract = await Factory.deploy(...args);
+  await contract.waitForDeployment();
+  const address = await contract.getAddress();
+  console.log(`✅ ${name} deployed at:`, address);
+  return contract;
+}
+
+async function sendTx(txPromise, label = "tx") {
+  const tx = await txPromise;
+  console.log(`⏳ Waiting for ${label}...`);
+  await tx.wait();
+  console.log(`✅ ${label} confirmed:`, tx.hash);
+  return tx;
 }
 
 async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {

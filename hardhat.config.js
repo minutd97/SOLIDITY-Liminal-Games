@@ -25,10 +25,10 @@ module.exports = {
         //blockNumber: 321922670,
       },
       chainId: 31337,
-      mining: {
-        auto: true,
-        interval: [3000, 5000],
-      },
+      // mining: {
+      //   auto: true,
+      //   interval: [3000, 5000],
+      // },
     },
     localhost: {
       url: "http://127.0.0.1:8545",

@@ -23,7 +23,7 @@ async function deploy() {
         const { salt, predicted, fullBytecode } = await findMatchingHookAddress(hookFactory.target, POOL_MANAGER);
         // This will auto-await tx + wait
         await sendTx(hookFactory.create(fullBytecode, salt), "Create V4 Hook");
-        console.log("V4Hook deployed correctly :", predicted);
+        console.log("✅ V4Hook deployed correctly :", predicted);
     
         // Deploy PoolHelper
         const poolHelper = await deployContract("V4PoolHelper", owner, [POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted]);
@@ -106,8 +106,9 @@ async function deploy() {
 
             await sendTx(vestingController.connect(owner).fundERC20ToWallet(beneficiary, limToken.target, vesting_beneficiary_half),
              `Fund beneficiary : ${beneficiary} , with LIM tokens ${ethers.formatEther(vesting_beneficiary_half)}`);
+
+            console.log(`Funded beneficiary : ${beneficiary} with LIM tokens ${ethers.formatEther(vesting_beneficiary_half)}`);
         }
-        console.log("\n");
 
         // Fund the vesting with the remaining token reserve with a linear realease
         const vesting_vault_reserve_upfront = ethers.parseEther("10000000"); // 10M
@@ -122,10 +123,10 @@ async function deploy() {
         await sendTx(limToken.transfer(vestingVault.target, totalVaultReserves), `Transfer ${ethers.formatEther(totalVaultReserves)} LIM tokens to TeamVestingVault`);
 
         await log_TokenBalance(limToken, "LIM", owner.address, "Owner");
-        console.log("✅ Deployment Succeded !");
+        console.log("✅ Presale Deployment Succeded !");
         process.exit(0);
     } catch (error) {
-        console.error("❌ Deployment failed:", error);
+        console.error("❌ Presale Deployment failed:", error);
         process.exit(1);
     }
 }
@@ -141,9 +142,9 @@ async function deployContract(name, signer, args = []) {
 
 async function sendTx(txPromise, label = "tx") {
   const tx = await txPromise;
-  console.log(`⏳ Waiting for ${label}...`);
+  //console.log(`⏳ Waiting for ${label}...`);
   await tx.wait();
-  console.log(`✅ ${label} confirmed:`, tx.hash);
+  //console.log(`✅ ${label} confirmed:`, tx.hash);
   return tx;
 }
 

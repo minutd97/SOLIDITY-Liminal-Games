@@ -14,8 +14,9 @@ describe("GameTreasury – Vesting & Fee Management", function () {
     // Deploy treasury
     const upfrontUnlocked = ethers.parseEther("5000000");
     const totalAllocation = ethers.parseEther("75000000");
+    const vestingDuration = 6 * 30 * 24 * 60 * 60;       // 6 months
     const Treasury = await ethers.getContractFactory("GameTreasury");
-    const treasury = await Treasury.deploy(await lim.getAddress(), totalAllocation, upfrontUnlocked);
+    const treasury = await Treasury.deploy(await lim.getAddress(), totalAllocation, upfrontUnlocked, vestingDuration);
     await treasury.waitForDeployment();
 
     // Fund treasury with full 75M LIM

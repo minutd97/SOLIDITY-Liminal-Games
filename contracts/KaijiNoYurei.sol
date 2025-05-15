@@ -7,11 +7,6 @@ interface IKNYRelayerVerifier {
     function getDecryptedNumbers(uint gameId, uint roundId) external view returns (uint[] memory);
 }
 
-interface IKNYBet {
-    function registerGameInBetting(uint gameId) external;
-    function settleBets(uint gameId, address winner) external;
-}
-
 contract KaijiNoYurei {
     uint constant PLAYER_LIMIT = 5;
     uint constant START_POINTS = 10;
@@ -43,7 +38,6 @@ contract KaijiNoYurei {
     mapping(address => uint8) public playerGameCount;
 
     address public immutable relayerVerifier;
-    address public immutable knyBet;
 
     event GameCreated(uint gameId);
     event GameStarted(uint gameId);
@@ -56,9 +50,8 @@ contract KaijiNoYurei {
     event GameWon(uint gameId, address player);
     event GameClear(uint gameId);
 
-    constructor(address _relayerVerifier, address _knyBet) {
+    constructor(address _relayerVerifier) {
         relayerVerifier = _relayerVerifier;
-        knyBet = _knyBet;
         createNewGame();
     }
 
@@ -96,9 +89,7 @@ contract KaijiNoYurei {
         games[gameId].active = true;
         games[gameId].roundId = 0;
 
-        IKNYBet(knyBet).registerGameInBetting(gameId);
         emit GameStarted(gameId);
-
         createNewGame(); // Prepare the next available game
     }
 
@@ -219,7 +210,6 @@ contract KaijiNoYurei {
             startRound(gameId);
             return;
         } else if (playerCount == 1) {
-            IKNYBet(knyBet).settleBets(gameId, playerWonAddress);
             emit GameWon(gameId, playerWonAddress);
         } else {
             // No winners for this game

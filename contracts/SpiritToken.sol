@@ -17,7 +17,7 @@ contract SpiritToken is ERC20, Ownable, Pausable, AccessControl {
     event AdminRoleRenounced(address indexed previousAdmin); // Emitted when admin role is renounced
 
     /// @notice Deploys the SPIRIT token and assigns the deployer as both owner and admin.
-    constructor() ERC20("Spirit Token", "$SPIRIT") Ownable(msg.sender) {
+    constructor() ERC20("Spirit Token", "SPIRIT") Ownable(msg.sender) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 

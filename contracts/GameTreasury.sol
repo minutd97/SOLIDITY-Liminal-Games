@@ -31,13 +31,13 @@ contract GameTreasury is Ownable, AccessControl {
     event FeeAdded(address indexed token, uint256 amount, string pool);
     event FeeCollected(address indexed token, uint256 amount, string pool, address to);
 
-    constructor(address _limToken, uint256 _totalAllocation, uint256 _upfrontUnlocked) Ownable(msg.sender) {
+    constructor(address _limToken, uint256 _totalAllocation, uint256 _upfrontUnlocked, uint256 _vestingDuration) Ownable(msg.sender) {
         require(_limToken != address(0), "Invalid token");
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         limToken = IERC20(_limToken);
         totalAllocation = _totalAllocation;
         upfrontUnlocked = _upfrontUnlocked;
-        vestingDuration = 180 days;
+        vestingDuration = _vestingDuration;
         startTimestamp = block.timestamp;
     }
 

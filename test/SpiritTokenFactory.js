@@ -14,7 +14,7 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
     const factory = await SpiritTokenFactory.deploy(
       await spirit.getAddress(),
       ethers.parseUnits("0.00004", "ether"), // pegRate = 0.00004 ETH
-      100 // burnFee = 1%
+      100 // redeemFee = 1%
     );
     await factory.waitForDeployment();
 

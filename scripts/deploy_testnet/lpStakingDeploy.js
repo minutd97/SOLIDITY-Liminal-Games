@@ -1,6 +1,7 @@
 require("dotenv").config();
 const { ethers } = require("hardhat");
 
+const POSITION_MANAGER = "0xAc631556d3d4019C95769033B5E719dD77124BAc";
 const LIMINAL_TOKEN = "0xD19Ed21D2AdCf76C8074716e484740a2197d9506";
 const LIMINAL_TOKEN_DISTRIBUTOR = "0x257f48ED50E6DF84434EEAf23128F51fFd7c1146";
 
@@ -14,42 +15,25 @@ async function deploy() {
         console.log("\n🚀 Deploying contracts...");
         console.log(`Contracts Owner : ${owner.address}`);
 
-        // Deploy KNYRelayerVerifier
-        const knyRelayerVerifier = await deployContract("KNYRelayerVerifier", owner, [owner.address]); // we need a trusted relayer wallet not the owner here
-
-        // Deploy KaijiNoYurei
-        const kaijiNoYurei = await deployContract("KaijiNoYurei", owner, [knyRelayerVerifier.target]);
-
-        // Deploy SpiritToken
-        const spiritToken = await deployContract("SpiritToken", owner);
-
-        // Deploy SpiritTokenFactory
-        const pegRate =  ethers.parseUnits("0.00004", "ether"); // pegRate = 0.00004 ETH
-        const redeemFee = 100; // redeemFee = 1%
-        const spiritTokenFactory = await deployContract("SpiritTokenFactory", owner, [spiritToken.target, pegRate, redeemFee]);
-
-        // Deploy GameTreasury
-        const upfrontUnlocked = ethers.parseEther("5000000"); //5M LIM
-        const totalAllocation = ethers.parseEther("75000000"); // 75M LIM
-        const vestingDuration = 6 * 30 * 24 * 60 * 60;       // 6 months
-        const gameTreasury = await deployContract("GameTreasury", owner, [LIMINAL_TOKEN, totalAllocation, upfrontUnlocked, vestingDuration]);
+        // Deploy LPStakingRewards
+        const lpStakingRewards = await deployContract("LPStakingRewards", owner, [LIMINAL_TOKEN, POSITION_MANAGER]);
 
         // Grant Liminal Distributor as the pool loader
-        await sendTx(gameTreasury.connect(owner).grantLoaderRole(LIMINAL_TOKEN_DISTRIBUTOR), `Grant Liminal Distributor as the pool loader`);
+        await sendTx(lpStakingRewards.connect(owner).grantLoaderRole(LIMINAL_TOKEN_DISTRIBUTOR), `Grant Liminal Distributor as the pool loader`);
 
         // Register the GameTreasury contract in the distributor
-        await sendTx(LiminalDistributor.connect(owner).setGameTreasury(gameTreasury.target), `Setting GameTreasury address in distributor`);
+        await sendTx(LiminalDistributor.connect(owner).setLPStaking(lpStakingRewards.target), `Setting LPStakingRewards address in distributor`);
 
         await log_TokenBalance(LiminalToken, "LIM", LIMINAL_TOKEN_DISTRIBUTOR, "Distributor");
         // Then trigger the token distribution
-        await sendTx(LiminalDistributor.connect(owner).distributeToGameTreasury(), `Distributing tokens to GameTreasury`);
+        await sendTx(LiminalDistributor.connect(owner).distributeToLPStaking(), `Distributing tokens to LPStakingRewards`);
 
         await log_TokenBalance(LiminalToken, "LIM", LIMINAL_TOKEN_DISTRIBUTOR, "Distributor");
     
-        console.log("✅ After Presale Deployment Succeded !");
+        console.log("✅ LPStakingRewards Deployment Succeded !");
         process.exit(0);
     } catch (error) {
-        console.error("❌ After Presale Deployment failed:", error);
+        console.error("❌ LPStakingRewards Deployment failed:", error);
         process.exit(1);
     }
 }

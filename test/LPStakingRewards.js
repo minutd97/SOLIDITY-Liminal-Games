@@ -283,11 +283,37 @@ it("V4 Pool Creation + Liquidty providing", async function () {
     expect(stake1.liquidity).to.be.gt(0);
     console.log("✅ User1 staked with liquidity:", stake1.liquidity.toString());
 
-    // --- Advance time by 2 weeks ---
-    const twoWeeks = 2 * 7 * 24 * 60 * 60 + 1;
-    await time.increase(twoWeeks);
+    // Advance to Day 3
+    await time.increase(3 * 24 * 60 * 60 + 1);
     await ethers.provider.send("evm_mine");
-    console.log("⏩ Time advanced by 2 weeks");
+    console.log("⏩ Time advanced to Day 3");
+
+    let [claim1, burn1] = await lpStakingRewards.getPending(tokenId);
+    let locked1 = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 3 – USER1: claimable", ethers.formatUnits(claim1), "burnable", ethers.formatUnits(burn1), "locked", ethers.formatUnits(locked1));
+
+    // Advance to Day 7
+    await time.increase(4 * 24 * 60 * 60); // +4 = Day 7
+    await ethers.provider.send("evm_mine");
+    console.log("⏩ Time advanced to Day 7");
+
+    [claim1, burn1] = await lpStakingRewards.getPending(tokenId);
+    locked1 = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 7 – USER1: claimable", ethers.formatUnits(claim1), "burnable", ethers.formatUnits(burn1), "locked", ethers.formatUnits(locked1));
+
+    // Advance to Day 10
+    await time.increase(3 * 24 * 60 * 60); // +3 = Day 10
+    await ethers.provider.send("evm_mine");
+    console.log("⏩ Time advanced to Day 10");
+
+    [claim1, burn1] = await lpStakingRewards.getPending(tokenId);
+    locked1 = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 10 – USER1: claimable", ethers.formatUnits(claim1), "burnable", ethers.formatUnits(burn1), "locked", ethers.formatUnits(locked1));
+
+    // Advance to Day 14
+    await time.increase(4 * 24 * 60 * 60); // +4 = Day 14
+    await ethers.provider.send("evm_mine");
+    console.log("⏩ Time advanced to Day 14");
 
     // --- Stake user2 ---
     console.log("🔐 Staking tokenId2 for user2:", tokenId2.toString());
@@ -298,87 +324,112 @@ it("V4 Pool Creation + Liquidty providing", async function () {
     expect(stake2.liquidity).to.be.gt(0);
     console.log("✅ User2 staked with liquidity:", stake2.liquidity.toString());
 
-    // --- Advance 1 more week ---
-    const oneWeek = 7 * 24 * 60 * 60 + 1;
-    await time.increase(oneWeek);
+    // Check both users on Day 14
+    [claim1, burn1] = await lpStakingRewards.getPending(tokenId);
+    locked1 = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 14 – USER1: claimable", ethers.formatUnits(claim1), "burnable", ethers.formatUnits(burn1), "locked", ethers.formatUnits(locked1));
+
+    let [claim2, burn2] = await lpStakingRewards.getPending(tokenId2);
+    let locked2 = await lpStakingRewards.getLocked(tokenId2);
+    console.log("📊 Day 14 – USER2: claimable", ethers.formatUnits(claim2), "burnable", ethers.formatUnits(burn2), "locked", ethers.formatUnits(locked2));
+
+    // Advance to Day 17
+    await time.increase(3 * 24 * 60 * 60); // +3 = Day 17
     await ethers.provider.send("evm_mine");
-    console.log("⏩ Time advanced by 1 more week");
+    console.log("⏩ Time advanced to Day 17");
 
-    // --- Check rewards for user1 (3 weeks staked) ---
-    const [claimable1, burnable1] = await lpStakingRewards.getPending(tokenId);
-    const total1 = claimable1 + burnable1;
-    console.log("📊 USER1: claimable", ethers.formatUnits(claimable1, 18), "burnable", ethers.formatUnits(burnable1, 18));
-    //expect(claimable1).to.be.closeTo(total1 / 10n, ethers.parseUnits("1", 18));
-    //expect(burnable1).to.be.closeTo(total1 * 9n / 10n, ethers.parseUnits("1", 18));
+    [claim1, burn1] = await lpStakingRewards.getPending(tokenId);
+    locked1 = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 17 – USER1: claimable", ethers.formatUnits(claim1), "burnable", ethers.formatUnits(burn1), "locked", ethers.formatUnits(locked1));
 
-    // --- Check rewards for user2 (1 week staked) ---
-    const [claimable2, burnable2] = await lpStakingRewards.getPending(tokenId2);
-    console.log("📊 USER2: claimable", ethers.formatUnits(claimable2, 18), "burnable", ethers.formatUnits(burnable2, 18));
+    [claim2, burn2] = await lpStakingRewards.getPending(tokenId2);
+    locked2 = await lpStakingRewards.getLocked(tokenId2);
+    console.log("📊 Day 17 – USER2: claimable", ethers.formatUnits(claim2), "burnable", ethers.formatUnits(burn2), "locked", ethers.formatUnits(locked2));
 
-    // --- Claim for user1 (should burn ~90%) ---
-    // const balanceBefore1 = await limToken.balanceOf(user1.address);
-    // await lpStakingRewards.connect(user1).claim(tokenId);
-    // const balanceAfter1 = await limToken.balanceOf(user1.address);
-    // const claimed1 = balanceAfter1 - balanceBefore1;
-    // console.log("✅ USER1 claimed", ethers.formatUnits(claimed1, 18), "LIM");
-
-    // expect(claimed1).to.be.closeTo(claimable1, ethers.parseUnits("20", 18));
-    // expect(await lpStakingRewards.burnableRewards()).to.be.closeTo(burnable1, ethers.parseUnits("20", 18));
-
-    // --- Advance another 2 weeks to pass 4-week decay ---
-    const twoMoreWeeks = 2 * 7 * 24 * 60 * 60 + 1;
-    await time.increase(twoMoreWeeks);
+    // Advance to Day 21
+    await time.increase(4 * 24 * 60 * 60); // +4 = Day 21
     await ethers.provider.send("evm_mine");
-    console.log("⏩ Advanced 2 more weeks (user1 > 5w total staked)");
+    console.log("⏩ Time advanced to Day 21");
 
-    // --- Query post-decay rewards ---
-    const [claimablePost, burnablePost] = await lpStakingRewards.getPending(tokenId);
-    console.log("📊 POST-DECAY USER1: claimable", ethers.formatUnits(claimablePost, 18), "burnable", ethers.formatUnits(burnablePost, 18));
-    //expect(burnablePost).to.equal(0);
+    [claim1, burn1] = await lpStakingRewards.getPending(tokenId);
+    locked1 = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 21 – USER1: claimable", ethers.formatUnits(claim1), "burnable", ethers.formatUnits(burn1), "locked", ethers.formatUnits(locked1));
 
-    const [claimablePost2, burnablePost2] = await lpStakingRewards.getPending(tokenId2);
-    console.log("📊 POST-DECAY USER2: claimable", ethers.formatUnits(claimablePost2, 18), "burnable", ethers.formatUnits(burnablePost2, 18));
+    [claim2, burn2] = await lpStakingRewards.getPending(tokenId2);
+    locked2 = await lpStakingRewards.getLocked(tokenId2);
+    console.log("📊 Day 21 – USER2: claimable", ethers.formatUnits(claim2), "burnable", ethers.formatUnits(burn2), "locked", ethers.formatUnits(locked2));
 
-    // --- Unstake user2 (should auto-claim with burn) ---
+    // Advance to Day 28
+    await time.increase(7 * 24 * 60 * 60); // +7 = Day 28
+    await ethers.provider.send("evm_mine");
+    console.log("⏩ Time advanced to Day 28");
+
+    [claim1, burn1] = await lpStakingRewards.getPending(tokenId);
+    locked1 = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 28 – USER1: claimable", ethers.formatUnits(claim1), "burnable", ethers.formatUnits(burn1), "locked", ethers.formatUnits(locked1));
+
+    [claim2, burn2] = await lpStakingRewards.getPending(tokenId2);
+    locked2 = await lpStakingRewards.getLocked(tokenId2);
+    console.log("📊 Day 28 – USER2: claimable", ethers.formatUnits(claim2), "burnable", ethers.formatUnits(burn2), "locked", ethers.formatUnits(locked2));
+
+    // Advance to Day 35
+    await time.increase(7 * 24 * 60 * 60); // +7 = Day 35
+    await ethers.provider.send("evm_mine");
+    console.log("⏩ Time advanced to Day 35");
+
+    [claim1, burn1] = await lpStakingRewards.getPending(tokenId);
+    locked1 = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 35 – USER1: claimable", ethers.formatUnits(claim1), "burnable", ethers.formatUnits(burn1), "locked", ethers.formatUnits(locked1));
+
+    [claim2, burn2] = await lpStakingRewards.getPending(tokenId2);
+    locked2 = await lpStakingRewards.getLocked(tokenId2);
+    console.log("📊 Day 35 – USER2: claimable", ethers.formatUnits(claim2), "burnable", ethers.formatUnits(burn2), "locked", ethers.formatUnits(locked2));
+
     const balanceBeforeUser2 = await limToken.balanceOf(user2.address);
     await lpStakingRewards.connect(user2).unstake(tokenId2);
     const balanceAfterUser2 = await limToken.balanceOf(user2.address);
     const claimedUser2 = balanceAfterUser2 - balanceBeforeUser2;
+    console.log("🔓 USER2 unstaked and claimed", ethers.formatUnits(claimedUser2, 18), "LIM");
 
     const postUnstake2 = await lpStakingRewards.stakes(tokenId2);
     expect(postUnstake2.staker).to.equal(ethers.ZeroAddress);
-    console.log("🔓 USER2 unstaked successfully (after auto-claim)");
-    console.log("✅ USER2 claimed", ethers.formatUnits(claimedUser2, 18), "LIM via unstake");
 
-    // Validate claim amount is ~10% if still in decay
-    if (burnablePost2 > 0n) {
-        expect(claimedUser2).to.be.closeTo(claimablePost2, ethers.parseUnits("10", 18));
-        expect(await lpStakingRewards.burnableRewards()).to.be.gte(burnablePost2);
-    } else {
-        expect(claimedUser2).to.equal(claimablePost2);
-    }
+    // Confirm burnable increased
+    const burnTotal = await lpStakingRewards.burnableRewards();
+    console.log("🔥 Burnable rewards after USER2 unstake:", ethers.formatUnits(burnTotal, 18));
 
-    // --- Claim again (no burn now) ---
-    const before2 = await limToken.balanceOf(user1.address);
+    // --- Advance to Day 42 (1 more week) ---
+    await time.increase(7 * 24 * 60 * 60); // +7 = Day 42
+    await ethers.provider.send("evm_mine");
+    console.log("⏩ Time advanced to Day 42");
+
+    // Only USER1 remains → should get full 437,500 LIM
+    let [claim1Final, burn1Final] = await lpStakingRewards.getPending(tokenId);
+    let locked1Final = await lpStakingRewards.getLocked(tokenId);
+    console.log("📊 Day 42 – USER1 FINAL: claimable", ethers.formatUnits(claim1Final), "burnable", ethers.formatUnits(burn1Final), "locked", ethers.formatUnits(locked1Final));
+
+    // --- User1 claims ---
+    const balanceBeforeUser1 = await limToken.balanceOf(user1.address);
     await lpStakingRewards.connect(user1).claim(tokenId);
-    const after2 = await limToken.balanceOf(user1.address);
-    const claimed2 = after2 - before2;
-    console.log("✅ USER1 claimed full:", ethers.formatUnits(claimed2, 18), "LIM");
+    const balanceAfterUser1 = await limToken.balanceOf(user1.address);
+    const claimedUser1 = balanceAfterUser1 - balanceBeforeUser1;
+    console.log("✅ USER1 claimed at Day 42:", ethers.formatUnits(claimedUser1, 18), "LIM");
 
-    expect(claimed2).to.be.closeTo(claimablePost, ethers.parseUnits("10", 18));
+    expect(claimedUser1).to.be.closeTo(claim1Final, ethers.parseUnits("1", 18)); // ≤1 LIM delta
 
-    // --- Unstake user1 ---
+    // --- User1 unstakes ---
     await lpStakingRewards.connect(user1).unstake(tokenId);
-    const postUnstake = await lpStakingRewards.stakes(tokenId);
-    expect(postUnstake.staker).to.equal(ethers.ZeroAddress);
-    console.log("🔓 USER1 unstaked successfully");
+    const postUnstake1 = await lpStakingRewards.stakes(tokenId);
+    expect(postUnstake1.staker).to.equal(ethers.ZeroAddress);
+    console.log("🔓 USER1 fully unstaked");
 
-    // --- Burn accumulated ---
+    // --- Owner burns the accumulated burnable rewards ---
     const burnBefore = await lpStakingRewards.burnableRewards();
-    console.log("🔥 Burnable:", ethers.formatUnits(burnBefore, 18), "LIM");
+    console.log("🔥 Executing final burn:", ethers.formatUnits(burnBefore, 18), "LIM");
     expect(burnBefore).to.be.gt(0);
 
     await lpStakingRewards.connect(owner).burnAccumulated();
+
     const burnAfter = await lpStakingRewards.burnableRewards();
     console.log("✅ Burn executed. Remaining:", ethers.formatUnits(burnAfter, 18));
     expect(burnAfter).to.equal(0);

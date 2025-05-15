@@ -87,20 +87,7 @@ contract LPStakingRewards is Ownable, IERC721Receiver, AccessControl, Reentrancy
     function unstake(uint256 tokenId) external nonReentrant {
         StakeInfo storage info = stakes[tokenId];
         require(info.staker == msg.sender, "Not staker");
-        _updateGlobalRewards();
-        _updateStakeReward(tokenId);
-
-        uint256 claimAmount = info.unclaimedClaimable;
-        uint256 burnAmount = info.unclaimedBurnable;
-
-        if (claimAmount > 0) {
-            rewardFund -= claimAmount;
-            limToken.transfer(msg.sender, claimAmount);
-        }
-        if (burnAmount > 0) {
-            burnableRewards += burnAmount;
-        }
-
+        _claimAndUpdate(tokenId); // ensures all reward logic is centralized
         totalStakedLiquidity -= info.liquidity;
         delete stakes[tokenId];
         positionManager.safeTransferFrom(address(this), msg.sender, tokenId);
@@ -109,16 +96,21 @@ contract LPStakingRewards is Ownable, IERC721Receiver, AccessControl, Reentrancy
     function claim(uint256 tokenId) external nonReentrant {
         StakeInfo storage info = stakes[tokenId];
         require(info.staker == msg.sender, "Not staker");
+        _claimAndUpdate(tokenId);
+    }
+
+    function _claimAndUpdate(uint256 tokenId) internal {
+        StakeInfo storage info = stakes[tokenId];
+
         _updateGlobalRewards();
         _updateStakeReward(tokenId);
 
         uint256 claimAmount = info.unclaimedClaimable;
         uint256 burnAmount = info.unclaimedBurnable;
-        require(claimAmount > 0 || burnAmount > 0, "Nothing to claim");
 
         if (claimAmount > 0) {
             rewardFund -= claimAmount;
-            limToken.transfer(msg.sender, claimAmount);
+            limToken.transfer(info.staker, claimAmount); // 🔐 use info.staker
         }
         if (burnAmount > 0) {
             burnableRewards += burnAmount;
@@ -255,6 +247,39 @@ contract LPStakingRewards is Ownable, IERC721Receiver, AccessControl, Reentrancy
         claimable = info.unclaimedClaimable + claimAmt;
         burnable  = info.unclaimedBurnable  + burnAmt;
     }
+
+    function getLocked(uint256 tokenId) public view returns (uint256 locked) {
+      StakeInfo memory info = stakes[tokenId];
+      if (info.staker == address(0)) return 0;
+
+      // 1) simulate up‐to-date accRewardPerLiquidity
+      uint256 acc = accRewardPerLiquidity;
+      if (totalStakedLiquidity > 0 && block.timestamp > lastRewardTime) {
+          uint256 elapsedGlobal = block.timestamp - lastRewardTime;
+          uint256 cap           = rewardFund < weeklyRewardCap ? rewardFund : weeklyRewardCap;
+          uint256 rate          = cap / WEEK;
+          acc += (elapsedGlobal * rate * 1e18) / totalStakedLiquidity;
+      }
+
+      // 2) raw pending since lastDebt
+      uint256 rawPending = uint256(info.liquidity) * (acc - info.rewardDebt) / 1e18;
+      if (rawPending == 0) return 0;
+
+      // 3) determine how many seconds have actually unlocked
+      uint256 elapsed     = block.timestamp - info.lastUpdatedAt;
+      uint256 fullWeeks   = elapsed / WEEK;
+      uint256 unlockedSec = fullWeeks * WEEK;
+
+      // 4) the unlocked portion of rawPending is exactly:
+      //    unlockedTranche = rawPending * unlockedSec / elapsed
+      //   (if no full week has passed, unlockedSec == 0 → unlockedTranche == 0)
+      uint256 unlockedTranche = (elapsed == 0)
+        ? 0
+        : (rawPending * unlockedSec) / elapsed;
+
+      // 5) locked = rest of rawPending
+      locked = rawPending - unlockedTranche;
+  }
 
     function _updateGlobalRewards() internal {
         if (totalStakedLiquidity == 0) {

@@ -52,7 +52,10 @@ module.exports = {
     },
   },
   etherscan: {
-    apiKey: "5DFVXNNZ7GK7V13XDKSJIW5FGXXJY2HQ32",
+    apiKey: {
+      arbitrumOne: process.env.ARBISCAN_MAINNET_API_KEY,
+      arbitrumSepolia: process.env.ARBISCAN_TESTNET_API_KEY,
+    },
   },
   gasReporter: {
     enabled: true,

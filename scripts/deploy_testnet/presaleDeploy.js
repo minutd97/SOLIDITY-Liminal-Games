@@ -1,3 +1,4 @@
+require("@nomicfoundation/hardhat-verify");
 require("dotenv").config();
 const { ethers } = require("hardhat");
 
@@ -7,7 +8,7 @@ const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
 async function deploy() {
     try {
-        const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545"); //process.env.ARBITRUM_TESTNET_PROV
+        const provider = new ethers.JsonRpcProvider(process.env.REAL_DEPLOY ? process.env.ARBITRUM_TESTNET_PROV : "http://127.0.0.1:8545");
         const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
 
         console.log("\n🚀 Deploying contracts...");
@@ -15,7 +16,7 @@ async function deploy() {
 
         // Deploy LIM Token
         const limToken = await deployContract("LiminalToken", owner);
-    
+
         // Deploy V4HookFactory
         const hookFactory = await deployContract("V4HookFactory", owner);
         
@@ -46,26 +47,19 @@ async function deploy() {
         const distributor = await deployContract("LiminalDistributor", owner, [limToken.target]);
         await sendTx(limToken.transfer(distributor.target, totalAmount),
          `Fund the LiminalDistributor with ${ethers.formatEther(totalAmount)} LIM in total`);
-    
+
         // Deploy LongTermReserve and transfer 30M LIM to reserve
         const reserve_upfront = ethers.parseEther("5000000"); // 5M
         const reserve_total = ethers.parseEther("30000000");   // 30M
-        const reserve_cliff = 30 * 24 * 60 * 60;               // 1 month
+        const reserve_cliff = 900;//30 * 24 * 60 * 60;               // 1 month
         const reserve_duration = 3 * 30 * 24 * 60 * 60;       // 3 months
-        const reserve = await deployContract("LongTermReserve", owner, [
-            limToken.target, 
-            owner.address, 
-            reserve_upfront, 
-            reserve_total, 
-            reserve_cliff, 
-            reserve_duration
-        ]);
+        const reserve = await deployContract("LongTermReserve", owner, [limToken.target, owner.address, reserve_upfront, reserve_total, reserve_cliff, reserve_duration]);
         await sendTx(limToken.transfer(reserve.target, reserve_total),
          `Fund the LongTermReserve with ${ethers.formatEther(reserve_total)} LIM in total`);
 
         // Deploy AirdropDistributor and transfer 10M LIM to airdrop
         const airdrop_reserves = ethers.parseEther("10000000"); // 10M
-        const airdrop_cliff = 30 * 24 * 60 * 60; // 30 days
+        const airdrop_cliff = 900;//30 * 24 * 60 * 60; // 30 days
         const airdrop_duration = 182 * 24 * 60 * 60; // aprox. 6 months
         const airdrop = await deployContract("AirdropDistributor", owner, [limToken.target, airdrop_reserves, airdrop_cliff, airdrop_duration]);
         await sendTx(limToken.transfer(airdrop.target, airdrop_reserves),
@@ -85,7 +79,7 @@ async function deploy() {
         const vesting_block = await ethers.provider.getBlock("latest");
         const vesting_start = vesting_block.timestamp;
         const vesting_duration = 365 * 24 * 60 * 60; // 12 months
-        const vesting_cliff = 30 * 24 * 60 * 60; // 1 month
+        const vesting_cliff = 900;//30 * 24 * 60 * 60; // 1 month
         const vesting_beneficiary_half = ethers.parseEther("10000000"); // 10M
     
         const beneficiary1 = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
@@ -124,6 +118,15 @@ async function deploy() {
 
         await log_TokenBalance(limToken, "LIM", owner.address, "Owner");
         console.log("✅ Presale Deployment Succeded !");
+
+        console.log("Verifying contracts...")
+        await verifyContract(limToken.target);
+        await verifyContract(presale.target, [limToken.target, poolHelper.target, minEthRequiered]);
+        await verifyContract(distributor.target, [limToken.target]);
+        await verifyContract(reserve.target, [limToken.target, owner.address, reserve_upfront, reserve_total, reserve_cliff, reserve_duration]);
+        await verifyContract(airdrop.target, [limToken.target, airdrop_reserves, airdrop_cliff, airdrop_duration]);
+        await verifyContract(vestingController.target);
+        await verifyContract(vestingVault.target, [vestingController.target]);
         process.exit(0);
     } catch (error) {
         console.error("❌ Presale Deployment failed:", error);
@@ -146,6 +149,29 @@ async function sendTx(txPromise, label = "tx") {
   await tx.wait();
   //console.log(`✅ ${label} confirmed:`, tx.hash);
   return tx;
+}
+
+async function verifyContract(address, constructorArgs = [], contractPath = undefined) {
+    console.log(`🔍 Verifying contract at ${address}...`);
+
+    try {
+        await hre.run("verify:verify", {
+            address,
+            constructorArguments: constructorArgs,
+            contract: contractPath, // Optional: e.g., "contracts/MyToken.sol:MyToken" if you're using custom subfolder structures
+        });
+        console.log("✅ Verified on Arbiscan");
+    } catch (err) {
+        const msg = err.message || "";
+        if (
+            msg.includes("Already Verified") ||
+            msg.includes("Contract source code already verified")
+        ) {
+            console.log("ℹ️ Contract already verified");
+        } else {
+            console.error("❌ Verification failed:", msg);
+        }
+    }
 }
 
 async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {

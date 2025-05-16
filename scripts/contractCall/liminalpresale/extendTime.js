@@ -17,7 +17,8 @@ async function execute() {
         const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
         const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
 
-        await sendTx(LiminalPresale.connect(owner).endPresale(), `Ending presale`);
+        const timeToAdd = 300;
+        await sendTx(LiminalPresale.connect(owner).extendEndTime(timeToAdd), `Extend time with ${timeToAdd} seconds`);
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

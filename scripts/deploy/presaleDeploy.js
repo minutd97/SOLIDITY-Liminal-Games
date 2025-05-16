@@ -11,10 +11,7 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-
-const POOL_MANAGER = "0xFB3e0C6F74eB1a21CC1Da29aeC80D2Dfe6C9a317";
-const POSITION_MANAGER = "0xAc631556d3d4019C95769033B5E719dD77124BAc";
-const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+const {POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function deploy() {
     try {

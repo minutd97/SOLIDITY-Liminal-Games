@@ -17,7 +17,10 @@ async function execute() {
         const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
         const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
 
-        await sendTx(LiminalPresale.connect(owner).endPresale(), `Ending presale`);
+        for (let i = 0; i < 1; i++){
+            const batchSize = 100;
+            await sendTx(LiminalPresale.connect(owner).refundUsers(batchSize), `Refunding ETH to users with batch size ${batchSize}`);
+        }
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

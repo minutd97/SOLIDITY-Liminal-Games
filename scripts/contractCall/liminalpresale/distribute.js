@@ -8,8 +8,7 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-
-const LIMINAL_PRESALE = "0x87B557e69173899F4A2948EA45a51FD0e54818C4";
+const {LIMINAL_PRESALE} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function execute() {
     try {
@@ -20,7 +19,7 @@ async function execute() {
 
         for (let i = 0; i < 1; i++){
             const batchSize = 100;
-            await sendTx(LiminalPresale.connect(owner).distributeTokens(batchSize), `Distributing tokens to batch size ${batchSize}`);
+            await sendTx(LiminalPresale.connect(owner).distributeTokens(batchSize), `Distributing tokens to users with batch size ${batchSize}`);
         }
 
         console.log("✅ Execution Succeded !");

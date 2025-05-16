@@ -11,8 +11,7 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-
-const LIMINAL_TOKEN = "0xD19Ed21D2AdCf76C8074716e484740a2197d9506";
+const {LIMINAL_TOKEN} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function deploy() {
     try {

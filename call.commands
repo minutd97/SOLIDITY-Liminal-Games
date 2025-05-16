@@ -1,0 +1,26 @@
+# Development
+$env:REPORT_GAS="true"; npx hardhat test test/GameTreasury.js
+
+# Testnet commands
+# Deployment
+npx hardhat run scripts/deploy/presaleDeploy.js --network localhost
+npx hardhat run scripts/deploy/presaleDeploy.js --network arbitrumSepolia
+
+npx hardhat run scripts/deploy/afterPresaleDeploy.js --network localhost
+npx hardhat run scripts/deploy/afterPresaleDeploy.js --network arbitrumSepolia
+
+npx hardhat run scripts/deploy/limStakingDeploy.js --network localhost
+npx hardhat run scripts/deploy/limStakingDeploy.js --network arbitrumSepolia
+
+npx hardhat run scripts/deploy/lpStakingDeploy.js --network localhost
+npx hardhat run scripts/deploy/lpStakingDeploy.js --network arbitrumSepolia
+
+npx hardhat run scripts/deploy/knyBetDeploy.js --network localhost
+npx hardhat run scripts/deploy/knyBetDeploy.js --network arbitrumSepolia
+
+npx hardhat run scripts/deploy/limGovernorDeploy.js --network localhost
+npx hardhat run scripts/deploy/limGovernorDeploy.js --network arbitrumSepolia
+
+# Contract calls
+npx hardhat run scripts/contractCall/startPresale.js --network localhost
+npx hardhat run scripts/contractCall/startPresale.js --network arbitrumSepolia

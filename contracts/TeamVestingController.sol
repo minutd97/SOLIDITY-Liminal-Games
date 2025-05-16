@@ -12,7 +12,8 @@ import "./TeamVestingWallet.sol";
 /// @dev Allows owner or funder roles to distribute and reclaim tokens across multiple vesting wallets.
 contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
     bytes32 public constant WALLET_FUNDER_ROLE = keccak256("WALLET_FUNDER_ROLE");
-    
+    address public vaultAddress;
+
     struct VestingInfo {
         address wallet;
         address beneficiary;
@@ -35,14 +36,14 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
     /// @notice Creates a new TeamVestingWallet for a beneficiary with a cliff and linear vesting schedule.
     function createVestingWallet(
         address beneficiary,
-        uint64 startTimestamp,          // when vesting starts (TGE for example)
         uint64 duration,                // total duration after start (e.g. 12 months)
-        uint64 cliffDuration,           // how long before first tokens unlock (e.g. 30 days)
-        address vaultAddress            
+        uint64 cliffDuration           // how long before first tokens unlock (e.g. 30 days)       
     ) external onlyOwner {
         require(beneficiary != address(0), "Invalid beneficiary");
         require(vestingWallets[beneficiary].wallet == address(0), "Already created");
         require(cliffDuration <= duration, "Cliff > duration");
+
+        uint64 startTimestamp = uint64(block.timestamp);
 
         TeamVestingWallet wallet = new TeamVestingWallet(
             beneficiary,
@@ -62,6 +63,10 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
         allVestingWallets.push(address(wallet));
 
         emit VestingWalletCreated(beneficiary, address(wallet), startTimestamp, duration, cliffDuration);
+    }
+
+    function setVaultAddress(address _vault) external onlyOwner {
+        vaultAddress = _vault;
     }
 
     /// @notice Transfers ERC20 tokens from the caller to the beneficiary's vesting wallet.

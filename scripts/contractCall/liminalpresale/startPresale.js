@@ -1,11 +1,13 @@
 require("dotenv").config();
 const { ethers } = require("hardhat");
+const path = require("path");
+const { getProvider } = require(path.resolve(process.cwd(), "scripts/deployProvider"));
 
 const LIMINAL_PRESALE = "0x87B557e69173899F4A2948EA45a51FD0e54818C4";
 
 async function execute() {
     try {
-        const provider = new ethers.JsonRpcProvider(process.env.REAL_DEPLOY ? process.env.ARBITRUM_TESTNET_PROV : "http://127.0.0.1:8545");
+        const provider = getProvider();
         const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
         const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
 

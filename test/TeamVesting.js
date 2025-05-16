@@ -18,6 +18,9 @@ describe("FullTeamVesting", function () {
     const vault = await Vault.deploy(await controller.getAddress());
     await vault.waitForDeployment();
 
+    // Set vault address
+    await controller.connect(deployer).setVaultAddress(vault.target);
+
     // Grant funder role for vault and deployer
     await controller.grantFunderRole(await vault.getAddress());
     await controller.grantFunderRole(deployer.address);
@@ -77,10 +80,8 @@ describe("FullTeamVesting", function () {
       console.log("\nCreating vesting wallet for:", beneficiary.address);
       const tx = await controller.createVestingWallet(
         beneficiary.address,
-        start,
         duration,
-        cliff,
-        vault.target
+        cliff
       );
       await tx.wait();
 
@@ -121,10 +122,8 @@ describe("FullTeamVesting", function () {
     console.log("\nCreating vesting wallet for:", beneficiary3.address);
       const tx = await controller.createVestingWallet(
         beneficiary3.address,
-        start,
         duration,
-        cliff,
-        vault.target
+        cliff
       );
     await tx.wait();
 

@@ -82,13 +82,14 @@ async function deploy() {
         // Deploy TeamVestingVault
         const vestingVault = await deployContract("TeamVestingVault", owner, [vestingController.target]);
 
+        // Set vault address to controller
+        await sendTx(vestingController.setVaultAddress(vestingVault.target), `Set vault address to controller`);
+
         // Grant funder role for vault and deployer
         await sendTx(vestingController.grantFunderRole(vestingVault.target), `Grant funder role for TeamVestingVault`);
         await sendTx(vestingController.grantFunderRole(owner.address), `Grant funder role for contract Owner`);
 
         // Fund initial vesting wallets
-        const vesting_block = await ethers.provider.getBlock("latest");
-        const vesting_start = vesting_block.timestamp;
         const vesting_duration = 365 * 24 * 60 * 60; // 12 months
         const vesting_cliff = 900;//30 * 24 * 60 * 60; // 1 month
         const vesting_beneficiary_half = ethers.parseEther("10000000"); // 10M
@@ -100,10 +101,8 @@ async function deploy() {
             console.log("\nCreating vesting wallet for:", beneficiary);
             await sendTx(vestingController.createVestingWallet(
                 beneficiary,
-                vesting_start,
                 vesting_duration,
-                vesting_cliff,
-                vestingVault.target
+                vesting_cliff
             ), `Creating vesting wallet for: ${beneficiary}`);
     
             await sendTx(limToken.approve(vestingController.target, vesting_beneficiary_half),

@@ -7,9 +7,13 @@ function setTxLogging (canLog) {
     txLogging = canLog;
 }
 
+function isLocalNetwork() {
+    return hre.network.name === "hardhat" || hre.network.name === "localhost";
+}
+
 function getProvider() {
     return new ethers.JsonRpcProvider(
-        process.env.REAL_DEPLOY
+        !isLocalNetwork()
             ? (process.env.MAINNET_DEPLOY
                 ? process.env.ARBITRUM_MAINNET_PROV
                 : process.env.ARBITRUM_TESTNET_PROV)
@@ -41,6 +45,12 @@ async function sendTx(txPromise, label = "tx") {
 }
 
 async function verifyContract(address, constructorArgs = [], contractPath = undefined) {
+    if(isLocalNetwork())
+    {
+        console.log(`❌ Can't verify contract at ${address} on a local hardhat chain!`);
+        return;
+    }
+    
     console.log(`🔍 Verifying contract at ${address}...`);
 
     try {

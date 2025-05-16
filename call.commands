@@ -54,5 +54,15 @@ npx hardhat run scripts/contractCall/longtermreserve/releaseLongTerm.js --networ
 #########
 
 # TEAM VESTING
+npx hardhat run scripts/contractCall/teamvesting/createWallet.js --network localhost
+npx hardhat run scripts/contractCall/teamvesting/createWallet.js --network arbitrumSepolia
 
+npx hardhat run scripts/contractCall/teamvesting/fundWalletFromVault.js --network localhost
+npx hardhat run scripts/contractCall/teamvesting/fundWalletFromVault.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/teamvesting/reclaimUnvested.js --network localhost
+npx hardhat run scripts/contractCall/teamvesting/reclaimUnvested.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/teamvesting/revokeVesting.js --network localhost
+npx hardhat run scripts/contractCall/teamvesting/revokeVesting.js --network arbitrumSepolia
 #########

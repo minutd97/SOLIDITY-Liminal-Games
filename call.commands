@@ -20,7 +20,27 @@ npx hardhat run scripts/deploy/knyBetDeploy.js --network arbitrumSepolia
 
 npx hardhat run scripts/deploy/limGovernorDeploy.js --network localhost
 npx hardhat run scripts/deploy/limGovernorDeploy.js --network arbitrumSepolia
+#########
 
 # Contract calls
-npx hardhat run scripts/contractCall/startPresale.js --network localhost
-npx hardhat run scripts/contractCall/startPresale.js --network arbitrumSepolia
+# LIMINAL PRESALE
+npx hardhat run scripts/contractCall/liminalpresale/startPresale.js --network localhost
+npx hardhat run scripts/contractCall/liminalpresale/startPresale.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/liminalpresale/endPresale.js --network localhost
+npx hardhat run scripts/contractCall/liminalpresale/endPresale.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/liminalpresale/distribute.js --network localhost
+npx hardhat run scripts/contractCall/liminalpresale/distribute.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/liminalpresale/refund.js --network localhost
+npx hardhat run scripts/contractCall/liminalpresale/refund.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/liminalpresale/createPool.js --network localhost
+npx hardhat run scripts/contractCall/liminalpresale/createPool.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/liminalpresale/extendTime.js --network localhost
+npx hardhat run scripts/contractCall/liminalpresale/extendTime.js --network arbitrumSepolia
+#########
+
+#

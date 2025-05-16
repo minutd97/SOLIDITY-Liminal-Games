@@ -2,7 +2,15 @@ require("@nomicfoundation/hardhat-verify");
 require("dotenv").config();
 const { ethers } = require("hardhat");
 const path = require("path");
-const { getProvider } = require(path.resolve(process.cwd(), "scripts/deployProvider"));
+const {
+    getProvider,
+    deployContract,
+    sendTx,
+    setTxLogging,
+    verifyContract,
+    log_TokenBalance,
+    log_EthBalance
+} = require(path.resolve(process.cwd(), "scripts/deployUtils"));
 
 const POOL_MANAGER = "0xFB3e0C6F74eB1a21CC1Da29aeC80D2Dfe6C9a317";
 const POSITION_MANAGER = "0xAc631556d3d4019C95769033B5E719dD77124BAc";
@@ -10,6 +18,7 @@ const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
 async function deploy() {
     try {
+        setTxLogging(false);
         const provider = getProvider();
         const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
 
@@ -136,46 +145,6 @@ async function deploy() {
     }
 }
 
-async function deployContract(name, signer, args = []) {
-  const Factory = await ethers.getContractFactory(name, signer);
-  const contract = await Factory.deploy(...args);
-  await contract.waitForDeployment();
-  const address = await contract.getAddress();
-  console.log(`✅ ${name} deployed at:`, address);
-  return contract;
-}
-
-async function sendTx(txPromise, label = "tx") {
-  const tx = await txPromise;
-  //console.log(`⏳ Waiting for ${label}...`);
-  await tx.wait();
-  //console.log(`✅ ${label} confirmed:`, tx.hash);
-  return tx;
-}
-
-async function verifyContract(address, constructorArgs = [], contractPath = undefined) {
-    console.log(`🔍 Verifying contract at ${address}...`);
-
-    try {
-        await hre.run("verify:verify", {
-            address,
-            constructorArguments: constructorArgs,
-            contract: contractPath, // Optional: e.g., "contracts/MyToken.sol:MyToken" if you're using custom subfolder structures
-        });
-        console.log("✅ Verified on Arbiscan");
-    } catch (err) {
-        const msg = err.message || "";
-        if (
-            msg.includes("Already Verified") ||
-            msg.includes("Contract source code already verified")
-        ) {
-            console.log("ℹ️ Contract already verified");
-        } else {
-            console.error("❌ Verification failed:", msg);
-        }
-    }
-}
-
 async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {
   const factory = await ethers.getContractFactory("V4Hook");
 
@@ -199,11 +168,6 @@ async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {
     }
   }
   throw new Error("No matching address found");
-}
-
-async function log_TokenBalance(token, tokenName, userAddr, userName){
-    let tokenBalance = await token.balanceOf(userAddr);
-    console.log(`${userName} ${tokenName} BALANCE: ${ethers.formatEther(tokenBalance)}`);
 }
 
 deploy();

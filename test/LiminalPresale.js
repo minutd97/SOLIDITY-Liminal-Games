@@ -246,7 +246,7 @@ async function findMatchingHookAddress(factoryAddress, poolManagerAddress) {
 async function log_EthBalance(address, name) {
     let ethBalance = await ethers.provider.getBalance(address);
     console.log(`${name} ETH BALANCE: ${ethers.formatEther(ethBalance)}`);
-  }
+}
   
 async function log_TokenBalance(token, tokenName, userAddr, userName){
     let tokenBalance = await token.balanceOf(userAddr);

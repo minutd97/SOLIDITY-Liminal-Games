@@ -12,13 +12,9 @@ function isLocalNetwork() {
 }
 
 function getProvider() {
-    return new ethers.JsonRpcProvider(
-        !isLocalNetwork()
-            ? (process.env.MAINNET_DEPLOY
-                ? process.env.ARBITRUM_MAINNET_PROV
-                : process.env.ARBITRUM_TESTNET_PROV)
-            : "http://127.0.0.1:8545"
-    );
+    return isLocalNetwork()
+        ? new ethers.JsonRpcProvider("http://127.0.0.1:8545")
+        : ethers.provider; // Already correctly set by Hardhat
 }
 
 async function deployContract(name, signer, args = []) {

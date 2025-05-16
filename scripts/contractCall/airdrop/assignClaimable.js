@@ -9,19 +9,19 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {LIMINAL_PRESALE} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {AIRDROP} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function execute() {
     try {
         setTxLogging(true);
         const provider = getProvider();
         const owner = new ethers.Wallet(getOwner(), provider);
-        const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
+        const AirdropDistributor = await ethers.getContractAt("AirdropDistributor", AIRDROP, owner);
 
-        console.log("\n🚀 Starting presale...");
-
-        const presaleDuration = 5 * 60; // 5 minutes
-        await sendTx(LiminalPresale.connect(owner).startPresale(presaleDuration), `Starting presale with ${presaleDuration} duration`);
+        const user = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
+        const amount = ethers.parseUnits("10000", 18);
+        await sendTx(AirdropDistributor.connect(owner).setClaimable(user, amount), 
+         `Set claimable for ${user} with an amount of ${ethers.formatEther(amount)}`);
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

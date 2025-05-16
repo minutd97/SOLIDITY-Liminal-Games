@@ -9,19 +9,20 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {LIMINAL_PRESALE} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {TEAM_VESTING_VAULT, LIMINAL_TOKEN} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function execute() {
     try {
         setTxLogging(true);
         const provider = getProvider();
         const owner = new ethers.Wallet(getOwner(), provider);
-        const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
+        const TeamVestingVault = await ethers.getContractAt("TeamVestingVault", TEAM_VESTING_VAULT, owner);
+    
+        const beneficiary = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
+        const amount = ethers.parseEther("100000"); // 100k
 
-        console.log("\n🚀 Starting presale...");
-
-        const presaleDuration = 5 * 60; // 5 minutes
-        await sendTx(LiminalPresale.connect(owner).startPresale(presaleDuration), `Starting presale with ${presaleDuration} duration`);
+        await sendTx(TeamVestingVault.connect(owner).releaseTokensTo(beneficiary, LIMINAL_TOKEN, amount),
+            `Fund beneficiary : ${beneficiary} , with LIM tokens ${ethers.formatEther(amount)}`);
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

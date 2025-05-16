@@ -11,6 +11,12 @@ function isLocalNetwork() {
     return hre.network.name === "hardhat" || hre.network.name === "localhost";
 }
 
+function getOwner() {
+    return process.env.MAINNET_DEPLOY === "true"
+        ? process.env.MAINNET_PRIVATE_KEY
+        : process.env.TESTNET_PRIVATE_KEY;
+}
+
 function getProvider() {
     return isLocalNetwork()
         ? new ethers.JsonRpcProvider("http://127.0.0.1:8545")
@@ -80,6 +86,7 @@ async function log_EthBalance(address, name) {
 }
 
 module.exports = {
+    getOwner,
     getProvider,
     deployContract,
     sendTx,

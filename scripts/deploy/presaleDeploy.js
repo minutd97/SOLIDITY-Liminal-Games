@@ -3,6 +3,7 @@ require("dotenv").config();
 const { ethers } = require("hardhat");
 const path = require("path");
 const {
+    getOwner,
     getProvider,
     deployContract,
     sendTx,
@@ -17,7 +18,7 @@ async function deploy() {
     try {
         setTxLogging(false);
         const provider = getProvider();
-        const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
+        const owner = new ethers.Wallet(getOwner(), provider);
 
         console.log("\n🚀 Deploying contracts...");
         console.log(`Contracts Owner : ${owner.address}`);

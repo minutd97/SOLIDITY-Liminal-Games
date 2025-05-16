@@ -9,19 +9,18 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {LIMINAL_PRESALE} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {LONG_TERM_RESERVE} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function execute() {
     try {
         setTxLogging(true);
         const provider = getProvider();
         const owner = new ethers.Wallet(getOwner(), provider);
-        const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
+        const LongTermReserve = await ethers.getContractAt("LongTermReserve", LONG_TERM_RESERVE, owner);
 
-        console.log("\n🚀 Starting presale...");
-
-        const presaleDuration = 5 * 60; // 5 minutes
-        await sendTx(LiminalPresale.connect(owner).startPresale(presaleDuration), `Starting presale with ${presaleDuration} duration`);
+        const amount = ethers.parseUnits("10000", 18);
+        await sendTx(LongTermReserve.connect(owner).release(amount), 
+         `Releasing an amount of ${ethers.formatEther(amount)}`);
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

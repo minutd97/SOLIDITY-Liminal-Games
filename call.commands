@@ -43,4 +43,16 @@ npx hardhat run scripts/contractCall/liminalpresale/extendTime.js --network loca
 npx hardhat run scripts/contractCall/liminalpresale/extendTime.js --network arbitrumSepolia
 #########
 
-#
+# AIRDROP
+npx hardhat run scripts/contractCall/airdrop/assignClaimable.js --network localhost
+npx hardhat run scripts/contractCall/airdrop/assignClaimable.js --network arbitrumSepolia
+#########
+
+# LONG TERM RESERVE
+npx hardhat run scripts/contractCall/longtermreserve/releaseLongTerm.js --network localhost
+npx hardhat run scripts/contractCall/longtermreserve/releaseLongTerm.js --network arbitrumSepolia
+#########
+
+# TEAM VESTING
+
+#########

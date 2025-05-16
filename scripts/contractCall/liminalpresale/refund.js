@@ -2,6 +2,7 @@ require("dotenv").config();
 const { ethers } = require("hardhat");
 const path = require("path");
 const {
+    getOwner,
     getProvider,
     sendTx,
     setTxLogging,
@@ -14,7 +15,7 @@ async function execute() {
     try {
         setTxLogging(true);
         const provider = getProvider();
-        const owner = new ethers.Wallet(process.env.TESTNET_PRIVATE_KEY, provider);
+        const owner = new ethers.Wallet(getOwner(), provider);
         const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
 
         for (let i = 0; i < 1; i++){

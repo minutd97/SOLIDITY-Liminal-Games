@@ -52,18 +52,28 @@ contract GameTreasury is Ownable, AccessControl {
         gameFeeFunds += amount;
     }
 
-    /// @notice Transfer unlocked tokens to an address
+    /// @notice Transfer tokens to an address using gameFeeFunds first, then vested tokens
     function transferTokens(address to, uint256 amount) external onlyOwner {
-        require(amount <= releasable(), "Insufficient unlocked tokens");
-        released += amount;
-        limToken.safeTransfer(to, amount);
-        emit TokensTransferred(to, amount);
-    }
+        uint256 usedGameFee = 0;
+        uint256 usedReserve = 0;
 
-    /// @notice Transfer gameFeeFunds tokens (separate from totalAllocation)
-    function transferGameFeeTokens(address to, uint256 amount) external onlyOwner {
-        require(amount <= gameFeeFunds, "Insufficient game fee fund");
-        gameFeeFunds -= amount;
+        if (gameFeeFunds >= amount) {
+            // Fully covered by gameFeeFunds
+            gameFeeFunds -= amount;
+            usedGameFee = amount;
+        } else {
+            // Use all gameFeeFunds first
+            usedGameFee = gameFeeFunds;
+            gameFeeFunds = 0;
+
+            // Calculate remaining amount from vested reserves
+            uint256 remaining = amount - usedGameFee;
+            uint256 availableReserve = releasable(); // vested - released
+            require(remaining <= availableReserve, "Insufficient unlocked tokens");
+            released += remaining;
+            usedReserve = remaining;
+        }
+
         limToken.safeTransfer(to, amount);
         emit TokensTransferred(to, amount);
     }
@@ -81,14 +91,18 @@ contract GameTreasury is Ownable, AccessControl {
         return vestedAmount() - released;
     }
 
-    /// @notice Track token fees into liquidity pool
+    /// @notice Track token fees into liquidity pool and transfer tokens to this contract
     function addLiquidityFee(address tokenAddress, uint256 amount) external onlyRole(GAME_CONTRACT_ROLE) {
+        require(amount > 0, "Amount must be > 0");
+        IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), amount);
         liquidityPoolFees[tokenAddress] += amount;
         emit FeeAdded(tokenAddress, amount, "liquidityPool");
     }
 
-    /// @notice Track token fees into game treasury
+    /// @notice Track token fees into game treasury and transfer tokens to this contract
     function addGameFee(address tokenAddress, uint256 amount) external onlyRole(GAME_CONTRACT_ROLE) {
+        require(amount > 0, "Amount must be > 0");
+        IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), amount);
         gameTreasuryFees[tokenAddress] += amount;
         emit FeeAdded(tokenAddress, amount, "gameTreasury");
     }

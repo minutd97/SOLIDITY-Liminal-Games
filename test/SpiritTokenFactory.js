@@ -1,99 +1,123 @@
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
-const { expect, use } = require("chai");
+const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("Liminal Test Contracts: SpiritToken + Factory", function () {
   async function deployFixture() {
     const [owner, user1, user2] = await ethers.getSigners();
 
+    // Deploy LIM token (LiminalToken)
+    const LiminalToken = await ethers.getContractFactory("LiminalToken");
+    const lim = await LiminalToken.deploy();
+    await lim.waitForDeployment();
+
+    // Deploy Spirit token
     const SpiritToken = await ethers.getContractFactory("SpiritToken");
     const spirit = await SpiritToken.deploy();
     await spirit.waitForDeployment();
 
+    // Deploy Factory
     const SpiritTokenFactory = await ethers.getContractFactory("SpiritTokenFactory");
+    // Set pegRate as 0.01 LIM per 1 SPIRIT (both with 18 decimals)
+    // ethers.parseUnits("0.01", 18) = 10000000000000000 (1e16)
+    const pegRate = ethers.parseUnits("0.01", 18); // 0.01 LIM/SPIRIT, 18 decimals
+    const redeemFee = 100; // 1%
     const factory = await SpiritTokenFactory.deploy(
       await spirit.getAddress(),
-      ethers.parseUnits("0.00004", "ether"), // pegRate = 0.00004 ETH
-      100 // redeemFee = 1%
+      await lim.getAddress(),
+      pegRate,
+      redeemFee
     );
     await factory.waitForDeployment();
 
+    // Give users LIM for testing
+    await lim.connect(owner).transfer(user1.address, ethers.parseUnits("10", 18));
+    await lim.connect(owner).transfer(user2.address, ethers.parseUnits("10", 18));
+
     // Grant minter role to factory
     await spirit.connect(owner).grantMinterRole(await factory.getAddress());
-    // We lose all the roles for fainess and to make sure tokens will be minted only from factory
     await spirit.connect(owner).renounceAdmin();
 
-    return { owner, user1, user2, spirit, factory };
+    return { owner, user1, user2, lim, spirit, factory, pegRate, redeemFee };
   }
 
-  it("should mint SPIRIT from ETH", async function () {
-    const {owner, user1, spirit, factory } = await loadFixture(deployFixture);
+  it("should mint SPIRIT from LIM", async function () {
+    const { user1, spirit, factory, lim, pegRate } = await loadFixture(deployFixture);
 
-    await factory.connect(owner).setPegRate(ethers.parseUnits("0.00004", "ether"));
-    await factory.connect(owner).setRedeemFee(100);
+    // User approves LIM to factory
+    const spiritAmount = ethers.parseUnits("100", 18); // 100 SPIRIT
+    const requiredLIM = (spiritAmount * pegRate) / ethers.parseUnits("1", 18);
 
-    const ethSent = ethers.parseEther("0.004"); // Expect 100 SPIRIT
-    await factory.connect(user1).mintSpirit({ value: ethSent });
+    await lim.connect(user1).approve(factory.getAddress(), requiredLIM);
 
-    const userBalance = await spirit.balanceOf(user1.address);
-    expect(userBalance).to.equal(ethers.parseUnits("100", 18));
+    await factory.connect(user1).mintSpirit(spiritAmount);
 
-    const contractEth = await ethers.provider.getBalance(factory.getAddress());
-    expect(contractEth).to.equal(ethSent);
+    const userSpirit = await spirit.balanceOf(user1.address);
+    expect(userSpirit).to.equal(spiritAmount);
+
+    const factoryLIM = await lim.balanceOf(factory.getAddress());
+    expect(factoryLIM).to.equal(requiredLIM);
   });
 
-  it("should redeem SPIRIT to ETH minus redeem fee", async function () {
-    const { user1, spirit, factory } = await loadFixture(deployFixture);
+  it("should redeem SPIRIT to LIM minus redeem fee", async function () {
+    const { user1, spirit, factory, lim, pegRate, redeemFee } = await loadFixture(deployFixture);
 
-    // Mint first
-    const ethSent = ethers.parseEther("0.004"); // 100 SPIRIT
-    await factory.connect(user1).mintSpirit({ value: ethSent });
+    // Mint SPIRIT first
+    const spiritAmount = ethers.parseUnits("100", 18); // 100 SPIRIT
+    const requiredLIM = (spiritAmount * pegRate) / ethers.parseUnits("1", 18);
 
-    const spiritAmount = ethers.parseUnits("100", 18);
-    const pegRate = await factory.pegRate(); // 0.00004 ETH/SPIRIT
-    const redeemFee = await factory.redeemFee(); // 1%
+    await lim.connect(user1).approve(factory.getAddress(), requiredLIM);
+    await factory.connect(user1).mintSpirit(spiritAmount);
 
-    const expectedEth = (spiritAmount * pegRate) / 10n ** 18n;
-    const expectedFee = (expectedEth * redeemFee) / 10000n;
-    const expectedPayout = expectedEth - expectedFee;
-
-    // Approve + redeem
+    // Approve SPIRIT to factory for burn
     await spirit.connect(user1).approve(factory.getAddress(), spiritAmount);
-    const before = await ethers.provider.getBalance(user1.address);
 
-    const tx = await factory.connect(user1).redeemSpirit(spiritAmount);
-    const receipt = await tx.wait();
-    const gasUsed = receipt.gasUsed * receipt.gasPrice;
+    // Calculate expected payout
+    const limAmount = (spiritAmount * pegRate) / ethers.parseUnits("1", 18);
+    const fee = (limAmount * BigInt(redeemFee)) / 10000n;
+    const payout = limAmount - fee;
 
-    const after = await ethers.provider.getBalance(user1.address);
-    
-    const delta = BigInt(after - before + gasUsed);
-    expect(delta).to.equal(expectedPayout);
+    const before = await lim.balanceOf(user1.address);
+    await factory.connect(user1).redeemSpirit(spiritAmount);
+    const after = await lim.balanceOf(user1.address);
+
+    // User received LIM minus fee
+    expect(after - before).to.equal(payout);
   });
 
   it("should allow owner to withdraw collected fees and a wallet to deposit to public reserve", async function () {
-    const { owner, user1, factory, spirit, user2 } = await loadFixture(deployFixture);
+    const { owner, user1, factory, spirit, lim, user2, pegRate, redeemFee } = await loadFixture(deployFixture);
 
-    await factory.connect(user1).mintSpirit({ value: ethers.parseEther("0.004") }); // 100 SPIRIT
-    await spirit.connect(user1).approve(factory.getAddress(), ethers.parseUnits("100", 18));
-    await factory.connect(user1).redeemSpirit(ethers.parseUnits("100", 18));
-    
-    const factoryBalance = await ethers.provider.getBalance(factory.getAddress());
-    const expectedFee = ethers.parseUnits("0.00004", "ether"); // Matches 1% fee of 0.004 ETH
-    expect(factoryBalance).to.equal(expectedFee);
+    // Mint and redeem to generate fees
+    const spiritAmount = ethers.parseUnits("100", 18); // 100 SPIRIT
+    const requiredLIM = (spiritAmount * pegRate) / ethers.parseUnits("1", 18);
 
-    const before = await ethers.provider.getBalance(owner.address);
-    const tx = await factory.connect(owner).collectProtocolFees();
-    const receipt = await tx.wait();
-    const gasUsed = receipt.gasUsed * receipt.gasPrice;
-    const after = await ethers.provider.getBalance(owner.address);
+    await lim.connect(user1).approve(factory.getAddress(), requiredLIM);
+    await factory.connect(user1).mintSpirit(spiritAmount);
 
+    await spirit.connect(user1).approve(factory.getAddress(), spiritAmount);
+    await factory.connect(user1).redeemSpirit(spiritAmount);
+
+    const limAmount = (spiritAmount * pegRate) / ethers.parseUnits("1", 18);
+    const expectedFee = (limAmount * BigInt(redeemFee)) / 10000n;
+
+    // Factory should hold only the fee
+    const factoryLIM = await lim.balanceOf(factory.getAddress());
+    expect(factoryLIM).to.equal(expectedFee);
+
+    // Owner collects fees
+    const before = await lim.balanceOf(owner.address);
+    await factory.connect(owner).collectProtocolFees();
+    const after = await lim.balanceOf(owner.address);
+
+    expect(after - before).to.equal(expectedFee);
     const collected = await factory.collectedProtocolFees();
     expect(collected).to.equal(0);
-    expect(after - before + gasUsed).to.be.gt(0); // Owner received fees
 
-    await factory.connect(user2).depositToPublicReserve({ value: ethers.parseEther("1") }); // 1 ETH
+    // Deposit to public reserve
+    await lim.connect(user2).approve(factory.getAddress(), ethers.parseUnits("1", 18));
+    await factory.connect(user2).depositToPublicReserve(ethers.parseUnits("1", 18));
     const publicReserve = await factory.publicProtocolReserve();
-    expect(publicReserve).to.equal(ethers.parseEther("1"));
+    expect(publicReserve).to.equal(ethers.parseUnits("1", 18));
   });
 });

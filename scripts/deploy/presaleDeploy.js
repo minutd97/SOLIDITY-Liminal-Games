@@ -12,7 +12,7 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, UNIVERSAL_ROUTER} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function deploy() {
     try {
@@ -35,9 +35,12 @@ async function deploy() {
         await sendTx(hookFactory.create(fullBytecode, salt), "Create V4 Hook");
         console.log("✅ V4Hook deployed correctly :", predicted);
     
-        // Deploy PoolHelper
+        // Deploy V4PoolHelper
         const poolHelper = await deployContract("V4PoolHelper", owner, [POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted]);
     
+        // Deploy V4SwapHelper
+        const swapHelper = await deployContract("V4SwapHelper", owner, [UNIVERSAL_ROUTER, POOL_MANAGER, PERMIT2_ADDRESS]);
+
         // Deploy LiminalPresale
         const minEthRequiered = ethers.parseEther("0.5");
         const presale = await deployContract("LiminalPresale", owner, [limToken.target, poolHelper.target, minEthRequiered]);

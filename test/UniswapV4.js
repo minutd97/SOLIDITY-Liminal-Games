@@ -359,10 +359,10 @@ async function userMintsPosition(poolHelper, user) {
       0
   );
     
-  console.log("Exact amounts needed → ETH:", finalETH.toString(), "LIM:", finalLIM.toString());
+  console.log("Exact amounts needed → ETH:", ethers.formatEther(finalETH), "LIM:", ethers.formatEther(finalLIM));
 
   // 3a) Approve the ERC-20 itself so Permit2 can pull your LIM
-  await limToken.connect(user).approve(PERMIT2_ADDRESS, ethers.parseUnits("20000000000", 18));
+  await limToken.connect(user).approve(PERMIT2_ADDRESS, finalLIM);
   //const erc20Allow = await limToken.allowance(user.address, PERMIT2_ADDRESS);
   //console.log("🛠 ERC20 → Permit2 allowance:", erc20Allow.toString());    
 

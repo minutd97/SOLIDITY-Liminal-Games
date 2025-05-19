@@ -166,7 +166,6 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
     await poolHelper.waitForDeployment();
     console.log(`V4PoolHelper : ${poolHelper.target}`);
 
-    // DEV ONLY!!!!!!!!!!!!!!!!!!!!!!
     // Deploy SwapHelper
     const SwapHelper = await ethers.getContractFactory("V4SwapHelper");
     swapHelper = await SwapHelper.deploy(UNIVERSAL_ROUTER, POOL_MANAGER, PERMIT2_ADDRESS);
@@ -707,7 +706,7 @@ async function testExactAmounts(poolHelper) {
 async function log_EthBalance(address, name) {
     let ethBalance = await ethers.provider.getBalance(address);
     console.log(`${name} ETH BALANCE: ${ethers.formatEther(ethBalance)}`);
-  }
+}
   
 async function log_TokenBalance(token, tokenName, userAddr, userName){
     let tokenBalance = await token.balanceOf(userAddr);

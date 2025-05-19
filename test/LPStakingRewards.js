@@ -141,7 +141,7 @@ const PERMIT2_ABI = [
     }
 ];
   
-let limToken, swapHelper, hookAddress;
+let limToken, hookAddress;
 let tokenId;
 let tokenId2;
 
@@ -176,13 +176,6 @@ describe("LP Staking Rewards full test with Uniswap V4 pool created", function (
     const poolHelper = await PoolHelper.deploy(POOL_MANAGER, POSITION_MANAGER, PERMIT2_ADDRESS, predicted);
     await poolHelper.waitForDeployment();
     console.log(`V4PoolHelper : ${poolHelper.target}`);
-
-    // DEV ONLY!!!!!!!!!!!!!!!!!!!!!!
-    // Deploy SwapHelper
-    const SwapHelper = await ethers.getContractFactory("V4SwapHelper");
-    swapHelper = await SwapHelper.deploy(UNIVERSAL_ROUTER, POOL_MANAGER, PERMIT2_ADDRESS);
-    await swapHelper.waitForDeployment();
-    console.log(`V4SwapHelper : ${swapHelper.target}`);
 
     // Deploy LiminalPresale
     const minEthRequiered = ethers.parseEther("7");

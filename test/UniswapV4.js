@@ -298,8 +298,30 @@ async function swap(_zeroForOne, _amountIn, _user) {
 
     const minAmountOut = ethers.parseUnits("0.00001", 18);     // Minimum expected output
     const valueOfEth = _zeroForOne ? _amountIn : ethers.parseUnits("0", 18);
-    await swapHelper.connect(_user).swapExactInputSingle(poolKey, _zeroForOne, _amountIn, minAmountOut, { value: valueOfEth });
-    console.log(`✅ Successfully swapped! ${_zeroForOne ? "ETH -> LIM" : "LIM -> ETH"}, amountIn: ${ethers.formatUnits(_amountIn, 18)}`);
+    const tx = await swapHelper.connect(_user).swapExactInputSingle(poolKey, _zeroForOne, _amountIn, minAmountOut, { value: valueOfEth });
+    const receipt = await tx.wait();
+
+    let amountOut = null;
+
+    // Filter logs only from the swapHelper contract
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== swapHelper.target.toLowerCase()) continue;
+
+      try {
+        const parsed = swapHelper.interface.parseLog(log);
+        if (parsed.name === "SwapExecuted") {
+          amountOut = parsed.args.amountOut;
+          break;
+        }
+      } catch (e) {
+        // skip non-matching logs
+      }
+    }
+
+    if (!amountOut) {
+      throw new Error("SwapExecuted event not found");
+    }
+    console.log(`✅ Successfully swapped! ${_zeroForOne ? "ETH -> LIM" : "LIM -> ETH"}, amountIn: ${ethers.formatUnits(_amountIn, 18)}, amountOut: ${ethers.formatUnits(amountOut, 18)}`);
     
     await log_TokenBalance(limToken, "LIM", _user.address, "User1");
     await log_EthBalance(_user.address, "User1");

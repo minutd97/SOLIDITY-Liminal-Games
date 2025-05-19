@@ -12,32 +12,37 @@ import { IHooks } from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import { CurrencyLibrary, Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 
-/// @dev Only include this during Hardhat testing
-import "hardhat/console.sol";
-
+/// @title V4SwapHelper
+/// @notice Facilitates single-token swaps using Uniswap V4 and the Universal Router. 
+///         Primarily intended for backend-triggered or automated swaps initiated by the contract owner.
 contract V4SwapHelper {
     using CurrencyLibrary for Currency;
 
-    IUniversalRouter public immutable router;
-    IPoolManager public immutable poolManager;
-    IPermit2 public immutable permit2;
+    IUniversalRouter public immutable router; // Uniswap Universal Router contract used for executing multicalls
+    IPoolManager public immutable poolManager; // Uniswap V4 PoolManager used for identifying pool keys
+    IPermit2 public immutable permit2; // Permit2 contract used for token approvals across contracts
 
+    /// @notice Emitted after a successful swap, includes user address and amount received
+    event SwapExecuted(address indexed user, uint256 amountOut);
+
+    /// @notice Sets the router, poolManager, and permit2 addresses for interacting with Uniswap V4
     constructor(address _router, address _poolManager, address _permit2) {
         router = IUniversalRouter(_router);
         poolManager = IPoolManager(_poolManager);
         permit2 = IPermit2(_permit2);
     }
 
+    /// @notice Grants full token approval to Permit2 and allows Universal Router to spend tokens
     function approveTokenWithPermit2(address token) external {
         IERC20(token).approve(address(permit2), type(uint256).max);
         permit2.approve(token, address(router), type(uint160).max, type(uint48).max);
     }
 
+    /// @notice Executes a single-token swap using Uniswap V4 Universal Router, supports ETH and ERC20 input
     function swapExactInputSingle(PoolKey calldata key, bool zeroForOne, uint128 amountIn, uint128 minAmountOut) external payable {
         if (!zeroForOne) {
-            address tokenIn = address(uint160(Currency.unwrap(key.currency1))); // ← LIM in this case
+            address tokenIn = address(uint160(Currency.unwrap(key.currency1)));
             IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);
-            console.log("Transferred tokenIn to router contract, amount: ", amountIn);
         }
                 
         bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
@@ -75,20 +80,21 @@ contract V4SwapHelper {
             router.execute{ value: amountIn }(commands, inputs, deadline);
             uint256 balanceAfter = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
             uint256 amountOut = balanceAfter - balanceBefore;
-            console.log("Returned LIM amount: ", amountOut);
             bool success = IERC20(Currency.unwrap(key.currency1)).transfer(msg.sender, amountOut);
             require(success, "Failed to send LIM back to user");
+            emit SwapExecuted(msg.sender, amountOut);
         } else {
             // ERC20 as input
             uint256 balanceBefore = address(this).balance;
             router.execute(commands, inputs, deadline);
             uint256 balanceAfter = address(this).balance;
             uint256 amountOut = balanceAfter - balanceBefore;
-            console.log("Returned ETH amount: ", amountOut);
             (bool success, ) = msg.sender.call{value: amountOut}("");
             require(success, "Failed to send ETH back to user");
+            emit SwapExecuted(msg.sender, amountOut);
         }
     }
 
+    /// @notice Enables the contract to receive native ETH
     receive() external payable {}
 }

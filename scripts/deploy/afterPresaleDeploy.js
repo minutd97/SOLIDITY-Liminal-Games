@@ -25,12 +25,6 @@ async function deploy() {
         console.log("\n🚀 Deploying contracts...");
         console.log(`Contracts Owner : ${owner.address}`);
 
-        // Deploy KNYRelayerVerifier
-        const knyRelayerVerifier = await deployContract("KNYRelayerVerifier", owner, [owner.address]); // we need a trusted relayer wallet not the owner here
-
-        // Deploy KaijiNoYurei
-        const kaijiNoYurei = await deployContract("KaijiNoYurei", owner, [knyRelayerVerifier.target]);
-
         // Deploy SpiritToken
         const spiritToken = await deployContract("SpiritToken", owner);
 
@@ -38,6 +32,17 @@ async function deploy() {
         const pegRate =  ethers.parseUnits("0.00004", "ether"); // pegRate = 0.00004 ETH
         const redeemFee = 100; // redeemFee = 1%
         const spiritTokenFactory = await deployContract("SpiritTokenFactory", owner, [spiritToken.target, pegRate, redeemFee]);
+
+        // Grant minter role to factory
+        await sendTx(spiritToken.connect(owner).grantMinterRole(spiritTokenFactory.target), `Grant minter role to factory`);
+        // We lose all the roles for fainess and to make sure tokens will be minted only from factory
+        await sendTx(spiritToken.connect(owner).renounceAdmin(), `We lose all the roles for fainess and to make sure tokens will be minted only from factory`);
+
+        // Deploy KNYRelayerVerifier
+        const knyRelayerVerifier = await deployContract("KNYRelayerVerifier", owner, [owner.address]); // we need a trusted relayer wallet not the owner here
+
+        // Deploy KaijiNoYurei
+        const kaijiNoYurei = await deployContract("KaijiNoYurei", owner, [knyRelayerVerifier.target]);
 
         // Deploy GameTreasury
         const upfrontUnlocked = ethers.parseEther("5000000"); //5M LIM

@@ -70,6 +70,7 @@ contract KaijiNoYurei {
         emit GameCreated(gameCounter);
     }
 
+    // !!!!!!!!!!! SA DAM APPROVE LA NR MAXIM DE SPIRIT TOKEN INCA DIN DEPLOY CA SA SALVAM GAZ
     function joinGame() external {
         uint gameId = getAvailableGame();
         require(playerGameCount[msg.sender] < MAX_GAMES_PER_PLAYER, "The maximum game participation limit per player has been reached. Please wait for at least one of the five ongoing games to conclude before attempting to join another.");

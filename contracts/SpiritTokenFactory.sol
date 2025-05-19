@@ -51,15 +51,17 @@ contract SpiritTokenFactory is Ownable {
         emit RedeemFeeUpdated(newFee);
     }
 
-    /// @notice Mints SPIRIT tokens in exchange for ETH sent
-    function mintSpirit() external payable {
-        require(msg.value > 0, "Send ETH to mint");
-        uint256 amountToMint = msg.value * 1e18 / pegRate;
+    /// @notice Mints a specific amount of SPIRIT in exchange for ETH
+    function mintSpirit(uint256 spiritAmount) external payable {
+        require(spiritAmount > 0, "Invalid SPIRIT amount");
+        uint256 requiredETH = getRequiredETHForSpirit(spiritAmount);
+        require(msg.value == requiredETH, "Incorrect ETH sent");
+
         publicProtocolReserve += msg.value;
-        totalSpiritMinted += amountToMint;
-        
-        spirit.mint(msg.sender, amountToMint);
-        emit Minted(msg.sender, msg.value, amountToMint);
+        totalSpiritMinted += spiritAmount;
+
+        spirit.mint(msg.sender, spiritAmount);
+        emit Minted(msg.sender, msg.value, spiritAmount);
     }
 
     /// @notice Redeems SPIRIT tokens for ETH minus redemption fee
@@ -98,5 +100,11 @@ contract SpiritTokenFactory is Ownable {
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "ETH transfer failed");
         emit ProtocolFeesCollected(msg.sender, amount);
+    }
+
+    /// @notice Calculates the required ETH to mint a given amount of SPIRIT
+    function getRequiredETHForSpirit(uint256 spiritAmount) public view returns (uint256 ethCost) {
+        require(spiritAmount > 0, "Invalid SPIRIT amount");
+        ethCost = spiritAmount * pegRate / 1e18;
     }    
 }

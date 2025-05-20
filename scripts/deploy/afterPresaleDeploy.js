@@ -12,7 +12,9 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {LIMINAL_TOKEN, LIMINAL_TOKEN_DISTRIBUTOR} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {LIMINAL_TOKEN, LIMINAL_TOKEN_DISTRIBUTOR, CHAINLINK_PRICE_FEED, V4_HOOK} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const IS_MAINNET = process.env.MAINNET_DEPLOY === "true";
+let mockPriceAddress;
 
 async function deploy() {
     try {
@@ -28,10 +30,33 @@ async function deploy() {
         // Deploy SpiritToken
         const spiritToken = await deployContract("SpiritToken", owner);
 
+        if(!IS_MAINNET)
+        {
+            // Deploy MockChainlinkPriceFeed
+            const mockPriceFeed = await deployContract("MockChainlinkPriceFeed", owner, [250000000000]); //ETH price is 2500$
+            mockPriceAddress = mockPriceFeed.target;
+        }
+
+        // Uniswap V4 pool key
+        const poolKey = {
+            currency0: ethers.ZeroAddress,
+            currency1: LIMINAL_TOKEN,
+            fee: 5000,
+            tickSpacing: 60,
+            hooks: V4_HOOK
+        };
+        const poolId = getPoolId(poolKey);
+    
         // Deploy SpiritTokenFactory
-        const pegRate =  ethers.parseUnits("0.00004", "ether"); // pegRate = 0.00004 ETH
-        const redeemFee = 100; // redeemFee = 1%
-        const spiritTokenFactory = await deployContract("SpiritTokenFactory", owner, [spiritToken.target, pegRate, redeemFee]);
+        const redeemFee = 100; // 1%
+        const spiritTokenFactory = await deployContract("SpiritTokenFactory", owner, [
+            spiritToken.target,
+            LIMINAL_TOKEN,
+            redeemFee,
+            V4_HOOK,
+            poolId,
+            IS_MAINNET ? CHAINLINK_PRICE_FEED : mockPriceAddress
+        ]);
 
         // Grant minter role to factory
         await sendTx(spiritToken.connect(owner).grantMinterRole(spiritTokenFactory.target), `Grant minter role to factory`);
@@ -68,6 +93,30 @@ async function deploy() {
         console.error("❌ After Presale Deployment failed:", error);
         process.exit(1);
     }
+}
+
+function getPoolId(poolKey) {
+    const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+    const encoded = abiCoder.encode(
+        [
+            "address",   // currency0
+            "address",   // currency1
+            "uint24",    // fee
+            "int24",     // tickSpacing
+            "address"    // hooks
+        ],
+        [
+            poolKey.currency0,
+            poolKey.currency1,
+            poolKey.fee,
+            poolKey.tickSpacing,
+            poolKey.hooks
+        ]
+    );
+
+    const poolId = ethers.keccak256(encoded);
+    console.log("PoolId:", poolId);
+    return poolId;
 }
 
 deploy();

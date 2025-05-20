@@ -18,6 +18,8 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {PoolId, PoolIdLibrary}    from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
+import "hardhat/console.sol";
+
 interface IV4Hook {
   function latestSqrtPriceX96(PoolId poolId) external view returns (uint160);
 }
@@ -48,6 +50,18 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     uint256 private constant Q96 = 2**96; // Constant used in price and liquidity calculations
     int24 public standardTickLower; // Stored lower tick of the standard range
     int24 public standardTickUpper; // Stored upper tick of the standard range
+    
+    event PoolCreatedAndPositionMinted(
+        address indexed token0,
+        address indexed token1,
+        int24    tickLower,
+        int24    tickUpper,
+        uint128  liquidity,
+        uint256  amount0,
+        uint256  amount1
+    );
+    event PositionFeesCollected(address indexed token0, address indexed token1, uint256 indexed tokenId);
+    event LiquidityIncreasedFromContract(uint256 tokenId, uint256 token0Added, uint256 token1Added);
 
     /// @notice Initializes the helper with references to PoolManager, PositionManager, Permit2, and Hook
     constructor(address _poolManager, address _positionManager, address _permit2, address _hookAddress) Ownable(msg.sender) {
@@ -99,6 +113,50 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         bytes[] memory params = buildPositionParams(poolKey, actions, mintParams, sqrtPriceX96);
 
         positionManager.multicall{value: msg.value}(params);
+        emit PoolCreatedAndPositionMinted(
+            input.token0,
+            input.token1,
+            tickLower,
+            tickUpper,
+            liquidity,
+            input.amount0,
+            input.amount1
+        );
+    }
+
+    /// @notice Adds liquidity to an existing position using msg.value as ETH input and refunds any leftover.
+    /// @dev LIM is pulled from the owner; ETH is forwarded based on internal computation. Excess ETH is refunded.
+    function increaseLiquidityFromContract(address token0, address token1, uint256 amount0, uint256 amount1, uint256 tokenId) external payable onlyOwner {
+        // Compute required ETH and LIM for msg.value as input
+        //(uint256 amount0, uint256 amount1) = getAmountsForExact(msg.value, 0); // ETH-driven input
+
+        // Pull required LIM from owner
+        IERC20(token1).transferFrom(msg.sender, address(this), amount1);
+
+        // Build liquidity params
+        (bytes memory actions, bytes[] memory params) = buildIncreaseLiquidityParamsForUser(
+            token0,
+            token1,
+            amount0,
+            amount1,
+            tokenId
+        );
+
+        bytes memory inner = abi.encode(actions, params);
+        uint256 deadline = block.timestamp + 120;
+
+        // Execute the add liquidity call
+        positionManager.modifyLiquidities{value: amount0}(inner, deadline);
+
+        // Refund any excess ETH back to owner
+        uint256 remaining = address(this).balance;
+        if (remaining > 0) {
+            (bool success, ) = payable(msg.sender).call{value: remaining}("");
+            require(success, "Refund failed");
+        }
+        console.log("amount0 ", amount0);
+        console.log("amount1 ", amount1);
+        emit LiquidityIncreasedFromContract(tokenId, amount0, amount1);
     }
 
     /// @notice Collects all fees from a given Uniswap V4 position and sends them to the owner.
@@ -112,6 +170,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
 
         // Execute modifyLiquidities to collect fees
         positionManager.modifyLiquidities(inner, deadline);
+        emit PositionFeesCollected(token0, token1, tokenId);
     }
 
     /// @notice Calculates tickLower, tickUpper and initial sqrtPriceX96 based on input amounts
@@ -208,7 +267,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     }
 
     /// @notice Builds parameters for increasing liquidity in an existing LP position
-    function buildIncreaseLiquidityParamsForUser(address token0, address token1, uint256 amount0Desired, uint256 amount1Desired, uint256 tokenId) external view returns (bytes memory actions, bytes[] memory params) {
+    function buildIncreaseLiquidityParamsForUser(address token0, address token1, uint256 amount0Desired, uint256 amount1Desired, uint256 tokenId) public view returns (bytes memory actions, bytes[] memory params) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
         require(amount0Desired > 0 && amount1Desired > 0, "Amounts must be > 0");
 
@@ -344,7 +403,7 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     }
 
     /// @notice Returns both token amounts for an exact input of either token0 or token1
-    function getAmountsForExact(uint256 exact0, uint256 exact1) external view returns (uint256 amount0, uint256 amount1) {
+    function getAmountsForExact(uint256 exact0, uint256 exact1) public view returns (uint256 amount0, uint256 amount1) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
         require((exact0 == 0) != (exact1 == 0), "Specify exactly one exact amount");
 
@@ -377,6 +436,70 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
             sqrtB,
             sqrtP
         );
+    }
+
+    /// @notice Computes the maximum usable amounts of token0 and token1 based on user‐provided balances.
+    /// @param max0  Maximum amount of token0 the user can supply.
+    /// @param max1  Maximum amount of token1 the user can supply.
+    /// @return amount0  Actual token0 amount usable for adding liquidity.
+    /// @return amount1  Actual token1 amount usable for adding liquidity.
+    function getMaxAmountsForUserBalance(uint256 max0, uint256 max1) public view returns (uint256 amount0, uint256 amount1) {
+        require(standardTickLower < standardTickUpper, "Pool not initialized");
+
+        // current sqrt price, and range endpoints
+        uint160 sqrtP = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
+        uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
+        uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
+
+        // 1) compute how much liquidity each max balance would buy
+        uint128 liquidityFrom0 = LiquidityAmounts.getLiquidityForAmount0(
+            sqrtA, sqrtB, max0
+        );
+        uint128 liquidityFrom1 = LiquidityAmounts.getLiquidityForAmount1(
+            sqrtA, sqrtB, max1
+        );
+
+        // 2) pick the limiting liquidity
+        uint128 liquidity = liquidityFrom0 < liquidityFrom1 ? liquidityFrom0 : liquidityFrom1;
+
+        // 3) backsolve exact token0/token1 amounts for that liquidity
+        (amount0, amount1) = _getAmountsForLiquidity(
+            liquidity, sqrtA, sqrtB, sqrtP
+        );
+    }
+
+    function getBestAmountsForUserBalance(uint256 max0, uint256 max1)
+        public view returns (uint256 amount0, uint256 amount1)
+    {
+        require(standardTickLower < standardTickUpper, "Pool not initialized");
+        uint160 sqrtP = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
+        uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
+        uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
+
+        // 1) ETH-limited: Use all ETH, see how much LIM is required
+        uint128 liq0 = LiquidityAmounts.getLiquidityForAmount0(sqrtA, sqrtB, max0);
+        (uint256 amount0a, uint256 amount1a) = _getAmountsForLiquidity(liq0, sqrtA, sqrtB, sqrtP);
+
+        // 2) LIM-limited: Use all LIM, see how much ETH is required
+        uint128 liq1 = LiquidityAmounts.getLiquidityForAmount1(sqrtA, sqrtB, max1);
+        (uint256 amount0b, uint256 amount1b) = _getAmountsForLiquidity(liq1, sqrtA, sqrtB, sqrtP);
+
+        // Prefer the solution that uses the most total liquidity **and fits both balances**
+        bool aFits = amount0a <= max0 && amount1a <= max1;
+        bool bFits = amount0b <= max0 && amount1b <= max1;
+
+        if (aFits && bFits) {
+            // Pick the one that uses more liquidity (usually a)
+            return (liq0 >= liq1) ? (amount0a, amount1a) : (amount0b, amount1b);
+        } else if (aFits) {
+            return (amount0a, amount1a);
+        } else if (bFits) {
+            return (amount0b, amount1b);
+        } else {
+            // fallback: pick the min liquidity as before
+            uint128 liquidity = liq0 < liq1 ? liq0 : liq1;
+            return _getAmountsForLiquidity(liquidity, sqrtA, sqrtB, sqrtP);
+        }
     }
 
     /// @notice Internal helper to compute token0 and token1 amounts from liquidity

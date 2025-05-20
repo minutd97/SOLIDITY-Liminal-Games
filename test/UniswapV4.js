@@ -191,8 +191,8 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
     await presale.connect(owner).depositPresaleTokens(tokensForPresale);
 
     await limToken.transfer(user1.address, ethers.parseUnits("70000000", 18));
-    await log_TokenBalance(limToken, "LIM", user1.address, "user1");
-    console.log("user 1 address : ", user1.address);
+    //await log_TokenBalance(limToken, "LIM", user1.address, "user1");
+    //console.log("user 1 address : ", user1.address);
 
     return { owner, user1, user2, presale, poolHelper, hookAddress};
   }
@@ -246,6 +246,8 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
 
     const totalContributions = await presale.totalContributions();
     expect(totalContributions).to.equal(0);
+
+    await ownerIncreasesLiquidityByContract(poolHelper, owner, ownerTokenId);
 
     //await testExactAmounts(poolHelper);
     await userMintsPosition(poolHelper, user1);
@@ -324,6 +326,28 @@ async function swap(_zeroForOne, _amountIn, _user) {
     
     await log_TokenBalance(limToken, "LIM", _user.address, "User1");
     await log_EthBalance(_user.address, "User1");
+}
+
+async function ownerIncreasesLiquidityByContract(poolHelper, owner, ownerTokenId) {
+  console.log("──────────── Owner Increases Liquidity ─────────────");  
+    const [extraETH, extraLIM] = await poolHelper.getAmountsForExact(
+        ethers.parseEther("1"),
+        0//ethers.parseUnits("600000", 18)
+    );
+    console.log(`owner extraETH ${extraETH}, owner extraLIM ${extraLIM}`);
+
+    const [extraETH1, extraLIM1] = await poolHelper.getBestAmountsForUserBalance(
+        ethers.parseEther("10"),
+        ethers.parseEther("1000000")
+    );
+    console.log(`owner extraETH1 ${extraETH1}, owner extraLIM1 ${extraLIM1}`);
+
+    //const ethOverestimate = ethers.parseEther("0.06");
+    await limToken.connect(owner).approve(poolHelper.target, ethers.parseUnits("20000000000", 18));
+    await poolHelper.connect(owner).increaseLiquidityFromContract(ethers.ZeroAddress, limToken.target, extraETH, extraLIM, ownerTokenId, {
+      value: extraETH,
+    });
+    console.log(`Owner owner increased liquidity by contract!`);
 }
 
 async function ownerCollectsPositionFees(poolHelper, ownerAddress, ownerTokenId) {

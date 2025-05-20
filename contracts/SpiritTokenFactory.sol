@@ -3,9 +3,8 @@ pragma solidity ^0.8.20;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SpiritToken} from "./SpiritToken.sol";
-
-import "hardhat/console.sol";
 
 interface IV4Hook {
     function latestSqrtPriceX96(bytes32 poolId) external view returns (uint160);
@@ -24,20 +23,23 @@ interface IChainlinkPriceFeed {
         );
 }
 
-contract SpiritTokenFactory is Ownable {
-    SpiritToken public immutable spirit;
-    IERC20 public immutable limToken;
-    IV4Hook public immutable v4Hook;
-    bytes32 public immutable v4PoolId;
-    IChainlinkPriceFeed public immutable ethUsdOracle;
+/// @title SpiritTokenFactory
+/// @notice Enables minting and redeeming SPIRIT tokens for LIM tokens at a 1:1 rate.
+///         Also calculates LIM needed to match USD value using on-chain pricing.
+contract SpiritTokenFactory is Ownable, ReentrancyGuard {
+    SpiritToken public immutable spirit; // The SPIRIT token instance
+    IERC20 public immutable limToken; // The LIM token used for minting/redemption
+    IV4Hook public immutable v4Hook; // Hook to get on-chain LIM/ETH price from Uniswap V4
+    bytes32 public immutable v4PoolId; // The Uniswap V4 pool identifier
+    IChainlinkPriceFeed public immutable ethUsdOracle; // Chainlink ETH/USD oracle
 
-    uint256 public redeemFee; // basis points (100 = 1%)
+    uint256 public redeemFee; // Redemption fee in basis points (100 = 1%)
 
-    uint256 public publicProtocolReserve;
-    uint256 public collectedProtocolFees;
+    uint256 public publicProtocolReserve; // Total LIM reserve backing SPIRIT minting
+    uint256 public collectedProtocolFees; // Accumulated LIM from redemption fees
 
-    uint256 public totalSpiritMinted;
-    uint256 public totalSpiritBurned;
+    uint256 public totalSpiritMinted; // Total SPIRIT tokens minted
+    uint256 public totalSpiritBurned; // Total SPIRIT tokens burned
 
     event RedeemFeeUpdated(uint256 newFee);
     event Minted(address indexed user, uint256 limIn, uint256 spiritOut);
@@ -45,6 +47,7 @@ contract SpiritTokenFactory is Ownable {
     event PublicReserveDeposit(address indexed sender, uint256 amount);
     event ProtocolFeesCollected(address indexed collector, uint256 amount);
 
+    /// @notice Initializes the factory with token addresses, Uniswap V4 pool, and Chainlink oracle.
     constructor(
         address _spiritToken,
         address _limToken,
@@ -66,14 +69,15 @@ contract SpiritTokenFactory is Ownable {
         ethUsdOracle = IChainlinkPriceFeed(_ethUsdFeed);
     }
 
+    /// @notice Updates the redeem fee (max 5%)
     function setRedeemFee(uint256 newFee) external onlyOwner {
         require(newFee <= 500, "Max 5%");
         redeemFee = newFee;
         emit RedeemFeeUpdated(newFee);
     }
 
-    /// @notice Mint SPIRIT 1:1 for LIM
-    function mintSpirit(uint256 limAmount) external {
+    /// @notice Mints SPIRIT tokens 1:1 by locking LIM
+    function mintSpirit(uint256 limAmount) external nonReentrant {
        require(limAmount > 0, "Invalid LIM amount");
 
        // pull limAmount LIM from user
@@ -86,8 +90,8 @@ contract SpiritTokenFactory is Ownable {
        emit Minted(msg.sender, limAmount, limAmount);
     }
 
-    /// @notice Redeem SPIRIT 1:1 for LIM, minus fee
-    function redeemSpirit(uint256 spiritAmount) external {
+    /// @notice Redeems SPIRIT tokens for LIM minus the redemption fee
+    function redeemSpirit(uint256 spiritAmount) external nonReentrant {
         require(spiritAmount > 0, "Nothing to redeem");
   
         // compute fee on the 1:1 LIM redemption
@@ -105,6 +109,7 @@ contract SpiritTokenFactory is Ownable {
         emit Redeemed(msg.sender, spiritAmount, payout);
     }
 
+    /// @notice Allows the owner to collect accumulated protocol fees (in LIM)
     function collectProtocolFees() external onlyOwner {
         require(collectedProtocolFees > 0, "No fees to withdraw");
         uint256 amount = collectedProtocolFees;
@@ -113,7 +118,7 @@ contract SpiritTokenFactory is Ownable {
         emit ProtocolFeesCollected(msg.sender, amount);
     }
 
-    // Emergency only
+    /// @notice Owner can deposit LIM into the reserve manually (emergency only)
     function depositToPublicReserve(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be positive");
         require(limToken.transferFrom(msg.sender, address(this), amount), "LIM transfer failed");
@@ -121,59 +126,45 @@ contract SpiritTokenFactory is Ownable {
         emit PublicReserveDeposit(msg.sender, amount);
     }
 
-    /// @notice How many LIM are needed to buy `usdAmount` USD
-    /// @param usdAmount whole dollars (e.g. 30 for $30)
+    /// @notice Returns the exact LIM (in wei) needed to buy a given USD amount using current price
     function getRequiredLIMforUSD(uint256 usdAmount) public view returns (uint256) {
         require(usdAmount > 0, "Invalid amount");
 
-        // 1) Raw LIM per ETH (no scaling)
+        // Raw LIM per ETH (no scaling)
         uint160 sqrtPriceX96 = v4Hook.latestSqrtPriceX96(v4PoolId);
         uint256 rawLIMperETH = (uint256(sqrtPriceX96) * uint256(sqrtPriceX96)) >> 192;
         require(rawLIMperETH > 0, "Invalid price");
-        //console.log("rawLIMperETH:", rawLIMperETH);
 
-        // 2) ETH price in USD (Chainlink, 8 decimals)
+        // ETH price in USD (Chainlink, 8 decimals)
         (, int256 answer,,,) = ethUsdOracle.latestRoundData();
         require(answer > 0, "Invalid ETH price");
         uint256 ethUsd8 = uint256(answer);
-        //console.log("ethUsd8:", ethUsd8);
 
-        // 3) USD per LIM, scaled 8 decimals
-        //    = (USD per ETH) / (LIM per ETH)
+        // USD per LIM, scaled 8 decimals
         uint256 priceLIMinUSD_8 = ethUsd8 / rawLIMperETH;
-        //console.log("priceLIMinUSD_8:", priceLIMinUSD_8);
 
-        // 4) How many LIM to cover `usdAmount` dollars?
-        //    usdAmount * 1e8 => USD scaled to 8 decimals
+        // How many LIM to cover `usdAmount` dollars?
         uint256 usdScaled8 = usdAmount * 1e8;
-        //console.log("usdScaled8:", usdScaled8);
 
-        //    LIM_needed = (usdScaled8 * 1e18) / priceLIMinUSD_8
         uint256 limNeeded = (usdScaled8 * 1e18) / priceLIMinUSD_8;
-        //console.log("limNeeded:", limNeeded);
-
         return limNeeded;
     }
 
-/// @notice How many whole LIM *wei* are needed to buy `usdAmount` USD:
-///         - reverts if price lookup yields zero
-///         - if the true needed amount is non-zero but < 1 LIM, returns 1 LIM (1e18 wei)
-///         - otherwise floors to whole LIM tokens
-function getRequiredWholeLIMforUSD(uint256 usdAmount) external view returns (uint256) {
-    uint256 rawWei = getRequiredLIMforUSD(usdAmount);  // already in wei
+    /// @notice Returns the whole-token LIM (in wei) needed for USD value, with special rounding rules
+    function getRequiredWholeLIMforUSD(uint256 usdAmount) external view returns (uint256) {
+        uint256 rawWei = getRequiredLIMforUSD(usdAmount);  // already in wei
 
-    // revert if something went wrong (e.g. no price, usdAmount==0)
-    require(rawWei > 0, "Invalid LIM amount");
+        // revert if something went wrong (e.g. no price, usdAmount==0)
+        require(rawWei > 0, "Invalid LIM amount");
 
-    uint256 ONE_TOKEN = 1e18;
+        uint256 ONE_TOKEN = 1e18;
 
-    // bump any non-zero <1 LIM up to exactly 1 LIM
-    if (rawWei < ONE_TOKEN) {
-        return ONE_TOKEN;
+        // bump any non-zero <1 LIM up to exactly 1 LIM
+        if (rawWei < ONE_TOKEN) {
+            return ONE_TOKEN;
+        }
+
+        // otherwise floor down to whole tokens (in wei)
+        return (rawWei / ONE_TOKEN) * ONE_TOKEN;
     }
-
-    // otherwise floor down to whole tokens (in wei)
-    return (rawWei / ONE_TOKEN) * ONE_TOKEN;
-}
-
 }

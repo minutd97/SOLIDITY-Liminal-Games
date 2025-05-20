@@ -233,7 +233,9 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     const totalPresaleTokens = await presale.totalPresaleTokens();
     expect(totalPresaleTokens).to.equal(0);
 
-    const tx = await presale.createUniswapV4Pool();
+    const centerEth = ethers.parseEther("21");
+    const rangeSize = 120000;
+    const tx = await presale.createUniswapV4Pool(centerEth, rangeSize);
     const receipt = await tx.wait();
     const ownerTokenId = await returnTokenId(positionManager, poolHelper.target, receipt);
 
@@ -334,13 +336,13 @@ async function ownerIncreasesLiquidityByContract(poolHelper, owner, ownerTokenId
         ethers.parseEther("1"),
         0//ethers.parseUnits("600000", 18)
     );
-    console.log(`owner extraETH ${extraETH}, owner extraLIM ${extraLIM}`);
+    console.log(`owner extraETH ${ethers.formatEther(extraETH)}, owner extraLIM ${ethers.formatEther(extraLIM)}`);
 
     const [extraETH1, extraLIM1] = await poolHelper.getBestAmountsForUserBalance(
         ethers.parseEther("10"),
         ethers.parseEther("1000000")
     );
-    console.log(`owner extraETH1 ${extraETH1}, owner extraLIM1 ${extraLIM1}`);
+    console.log(`owner extraETH1 ${ethers.formatEther(extraETH1)}, owner extraLIM1 ${ethers.formatEther(extraLIM1)}`);
 
     //const ethOverestimate = ethers.parseEther("0.06");
     await limToken.connect(owner).approve(poolHelper.target, ethers.parseUnits("20000000000", 18));

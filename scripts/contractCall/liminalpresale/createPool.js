@@ -18,7 +18,9 @@ async function execute() {
         const owner = new ethers.Wallet(getOwner(), provider);
         const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
 
-        await sendTx(LiminalPresale.connect(owner).createUniswapV4Pool(), `Creating uniswap v4 pool`);
+        const centerEth = ethers.parseEther("21");
+        const rangeSize = 120000;
+        await sendTx(LiminalPresale.connect(owner).createUniswapV4Pool(centerEth, rangeSize), `Creating uniswap v4 pool`);
         await sendTx(LiminalPresale.connect(owner).transferPositionToHelper(POSITION_MANAGER, V4_POOL_HELPER, tokenID), `Transfer V4 position to V4Helper`);
 
         console.log("✅ Execution Succeded !");

@@ -268,7 +268,9 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
     const totalPresaleTokens = await presale.totalPresaleTokens();
     expect(totalPresaleTokens).to.equal(0);
 
-    const tx2 = await presale.createUniswapV4Pool();
+    const centerEth = ethers.parseEther("21");
+    const rangeSize = 120000;
+    const tx2 = await presale.createUniswapV4Pool(centerEth, rangeSize);
     const receipt = await tx2.wait();
     const ownerTokenId = await returnTokenId(positionManager, poolHelper.target, receipt);
 

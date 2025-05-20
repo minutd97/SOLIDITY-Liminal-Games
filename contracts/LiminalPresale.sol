@@ -18,7 +18,7 @@ struct PoolInput {
 
 interface IV4PoolHelper {
     function setupPermit2Approvals(address token0, address token1) external;
-    function createPoolAndAddLiquidity(PoolInput calldata input) external payable;
+    function createPoolAndAddLiquidity(PoolInput calldata input,  uint256 _centerETH, int24 _rangeSize) external payable;
 }
 
 /// @title LiminalPresale - Handles the contribution, distribution, and liquidity setup for LIM token presale
@@ -146,7 +146,7 @@ contract LiminalPresale is Ownable {
     }
 
     /// @notice Creates the Uniswap V4 pool and adds liquidity using ETH and LIM tokens
-    function createUniswapV4Pool() external onlyOwner {
+    function createUniswapV4Pool(uint256 _centerETH, int24 _rangeSize) external onlyOwner {
         require(tokensDistributed, "Tokens are not distributed");
         IV4PoolHelper(v4PoolHelper).setupPermit2Approvals(address(0), address(limToken));
         limToken.transfer(v4PoolHelper, totalPoolTokens);
@@ -163,7 +163,7 @@ contract LiminalPresale is Ownable {
             tickUpper: 0
         });
 
-        IV4PoolHelper(v4PoolHelper).createPoolAndAddLiquidity{value: totalContributions}(input);
+        IV4PoolHelper(v4PoolHelper).createPoolAndAddLiquidity{value: totalContributions}(input, _centerETH, _rangeSize);
         totalContributions = 0;
         totalPoolTokens = 0;
     }

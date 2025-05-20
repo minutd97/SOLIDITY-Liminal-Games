@@ -77,7 +77,7 @@ describe("Presale contract test + V4 Pool Creation", function () {
     await presale.connect(user1).contribute({ value: ethValue });
     await testAllowedContribution(presale, user1.address);
 
-    const userCount = 2;
+    const userCount = 13;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
 
@@ -187,7 +187,9 @@ describe("Presale contract test + V4 Pool Creation", function () {
     const totalPresaleTokens = await presale.totalPresaleTokens();
     expect(totalPresaleTokens).to.equal(0);
 
-    await presale.createUniswapV4Pool();
+    const centerEth = ethers.parseEther("21");
+    const rangeSize = 120000;
+    await presale.createUniswapV4Pool(centerEth, rangeSize);
     
     const totalPoolTokens = await presale.totalPoolTokens();
     expect(totalPoolTokens).to.equal(0);

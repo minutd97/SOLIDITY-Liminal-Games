@@ -250,7 +250,9 @@ it("V4 Pool Creation + Liquidty providing", async function () {
     const totalPresaleTokens = await presale.totalPresaleTokens();
     expect(totalPresaleTokens).to.equal(0);
 
-    const tx = await presale.createUniswapV4Pool();
+    const centerEth = ethers.parseEther("21");
+    const rangeSize = 120000;
+    const tx = await presale.createUniswapV4Pool(centerEth, rangeSize);
     const receipt = await tx.wait();
     const ownerTokenId = await returnTokenId(positionManager, poolHelper.target, receipt);
 

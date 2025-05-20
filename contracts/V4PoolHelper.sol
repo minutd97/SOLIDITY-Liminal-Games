@@ -73,8 +73,8 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     }
 
     /// @notice Creates a new pool and mints a position with initial liquidity
-    function createPoolAndAddLiquidity(PoolInput calldata _input) external payable onlyRole(POOL_CREATOR) {
-        (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) = calculateTicks(_input);
+    function createPoolAndAddLiquidity(PoolInput calldata _input, uint256 _centerETH, int24 _rangeSize) external payable onlyRole(POOL_CREATOR) {
+        (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) = calculateTicks(_input, _centerETH, _rangeSize);
         standardTickLower = tickLower;
         standardTickUpper = tickUpper;
 
@@ -154,8 +154,6 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
             (bool success, ) = payable(msg.sender).call{value: remaining}("");
             require(success, "Refund failed");
         }
-        console.log("amount0 ", amount0);
-        console.log("amount1 ", amount1);
         emit LiquidityIncreasedFromContract(tokenId, amount0, amount1);
     }
 
@@ -174,15 +172,16 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     }
 
     /// @notice Calculates tickLower, tickUpper and initial sqrtPriceX96 based on input amounts
-    function calculateTicks(PoolInput memory input) internal pure returns (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) {
+    function calculateTicks(PoolInput memory input, uint256 centerETH, int24 rangeSize) internal pure returns (int24 tickLower, int24 tickUpper, uint160 sqrtPriceX96) {
         int24 tickSpacing = input.tickSpacing;
 
-        sqrtPriceX96 = getSqrtPriceX96FromAmounts(input.amount0, input.amount1);
+        sqrtPriceX96 = getSqrtPriceX96FromAmounts(centerETH, input.amount1);
 
         int24 centerTick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);
         centerTick = (centerTick / tickSpacing) * tickSpacing;
 
-        int24 rangeSize = 40080;
+        //int24 rangeSize = 120000;
+        console.log("rangeSize ", uint256(uint24(rangeSize)));
         int24 halfRange = rangeSize / 2;
 
         tickLower = centerTick - halfRange;

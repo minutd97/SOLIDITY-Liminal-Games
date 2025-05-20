@@ -18,8 +18,6 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {PoolId, PoolIdLibrary}    from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
-import "hardhat/console.sol";
-
 interface IV4Hook {
   function latestSqrtPriceX96(PoolId poolId) external view returns (uint160);
 }
@@ -127,9 +125,6 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
     /// @notice Adds liquidity to an existing position using msg.value as ETH input and refunds any leftover.
     /// @dev LIM is pulled from the owner; ETH is forwarded based on internal computation. Excess ETH is refunded.
     function increaseLiquidityFromContract(address token0, address token1, uint256 amount0, uint256 amount1, uint256 tokenId) external payable onlyOwner {
-        // Compute required ETH and LIM for msg.value as input
-        //(uint256 amount0, uint256 amount1) = getAmountsForExact(msg.value, 0); // ETH-driven input
-
         // Pull required LIM from owner
         IERC20(token1).transferFrom(msg.sender, address(this), amount1);
 
@@ -180,8 +175,6 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         int24 centerTick = TickMath.getTickAtSqrtPrice(sqrtPriceX96);
         centerTick = (centerTick / tickSpacing) * tickSpacing;
 
-        //int24 rangeSize = 120000;
-        console.log("rangeSize ", uint256(uint24(rangeSize)));
         int24 halfRange = rangeSize / 2;
 
         tickLower = centerTick - halfRange;
@@ -410,95 +403,45 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
         uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
         uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
 
-        // derive liquidity from whichever exact side is set
-        uint128 liquidity;
+        // Get the ratio based on 1 ETH worth of liquidity
+        uint128 baseLiq = LiquidityAmounts.getLiquidityForAmount0(sqrtA, sqrtB, 1 ether);
+        (uint256 baseETH, uint256 baseLIM) = _getAmountsForLiquidity(baseLiq, sqrtA, sqrtB, sqrtP);
+
         if (exact0 > 0) {
-            // exact0 = ETH side
-            liquidity = LiquidityAmounts.getLiquidityForAmount0(
-                sqrtA,
-                sqrtB,
-                exact0
-            );
+            // Drive from ETH input
+            uint256 scale = FullMath.mulDiv(exact0, 1e18, baseETH); // scale = exact0 / baseETH (fixed-point)
+            amount0 = exact0;
+            amount1 = FullMath.mulDiv(baseLIM, scale, 1e18);
         } else {
-            // exact1 = LIM side
-            liquidity = LiquidityAmounts.getLiquidityForAmount1(
-                sqrtA,
-                sqrtB,
-                exact1
-            );
+            // Drive from LIM input
+            uint256 scale = FullMath.mulDiv(exact1, 1e18, baseLIM); // scale = exact1 / baseLIM
+            amount1 = exact1;
+            amount0 = FullMath.mulDiv(baseETH, scale, 1e18);
         }
-
-        // now convert that liquidity back into the two token amounts
-        (amount0, amount1) = _getAmountsForLiquidity(
-            liquidity,
-            sqrtA,
-            sqrtB,
-            sqrtP
-        );
     }
 
-    /// @notice Computes the maximum usable amounts of token0 and token1 based on user‐provided balances.
-    /// @param max0  Maximum amount of token0 the user can supply.
-    /// @param max1  Maximum amount of token1 the user can supply.
-    /// @return amount0  Actual token0 amount usable for adding liquidity.
-    /// @return amount1  Actual token1 amount usable for adding liquidity.
-    function getMaxAmountsForUserBalance(uint256 max0, uint256 max1) public view returns (uint256 amount0, uint256 amount1) {
+    /// @notice Calculates the optimal token0 and token1 amounts that can be used for liquidity,
+    ///         based on the user's maximum available balances and the pool's tick range.
+    ///         This function ensures the returned amounts match the pool's required ETH:LIM ratio
+    ///         and fit within both user-supplied balances.
+    function getBestAmountsForUserBalance(uint256 max0, uint256 max1) public view returns (uint256 amount0, uint256 amount1) {
         require(standardTickLower < standardTickUpper, "Pool not initialized");
 
-        // current sqrt price, and range endpoints
         uint160 sqrtP = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
         uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
         uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
 
-        // 1) compute how much liquidity each max balance would buy
-        uint128 liquidityFrom0 = LiquidityAmounts.getLiquidityForAmount0(
-            sqrtA, sqrtB, max0
-        );
-        uint128 liquidityFrom1 = LiquidityAmounts.getLiquidityForAmount1(
-            sqrtA, sqrtB, max1
-        );
+        // Use 1 ETH as base unit to get ETH:LIM ratio
+        uint128 unitLiq = LiquidityAmounts.getLiquidityForAmount0(sqrtA, sqrtB, 1 ether);
+        (uint256 baseETH, uint256 baseLIM) = _getAmountsForLiquidity(unitLiq, sqrtA, sqrtB, sqrtP);
 
-        // 2) pick the limiting liquidity
-        uint128 liquidity = liquidityFrom0 < liquidityFrom1 ? liquidityFrom0 : liquidityFrom1;
+        // Scale the ratio to fit within both user balances
+        uint256 scaleETH = (baseETH > 0) ? (max0 * 1e18 / baseETH) : type(uint256).max;
+        uint256 scaleLIM = (baseLIM > 0) ? (max1 * 1e18 / baseLIM) : type(uint256).max;
+        uint256 scale = scaleETH < scaleLIM ? scaleETH : scaleLIM;
 
-        // 3) backsolve exact token0/token1 amounts for that liquidity
-        (amount0, amount1) = _getAmountsForLiquidity(
-            liquidity, sqrtA, sqrtB, sqrtP
-        );
-    }
-
-    function getBestAmountsForUserBalance(uint256 max0, uint256 max1)
-        public view returns (uint256 amount0, uint256 amount1)
-    {
-        require(standardTickLower < standardTickUpper, "Pool not initialized");
-        uint160 sqrtP = IV4Hook(hookAddress).latestSqrtPriceX96(poolKey.toId());
-        uint160 sqrtA = TickMath.getSqrtPriceAtTick(standardTickLower);
-        uint160 sqrtB = TickMath.getSqrtPriceAtTick(standardTickUpper);
-
-        // 1) ETH-limited: Use all ETH, see how much LIM is required
-        uint128 liq0 = LiquidityAmounts.getLiquidityForAmount0(sqrtA, sqrtB, max0);
-        (uint256 amount0a, uint256 amount1a) = _getAmountsForLiquidity(liq0, sqrtA, sqrtB, sqrtP);
-
-        // 2) LIM-limited: Use all LIM, see how much ETH is required
-        uint128 liq1 = LiquidityAmounts.getLiquidityForAmount1(sqrtA, sqrtB, max1);
-        (uint256 amount0b, uint256 amount1b) = _getAmountsForLiquidity(liq1, sqrtA, sqrtB, sqrtP);
-
-        // Prefer the solution that uses the most total liquidity **and fits both balances**
-        bool aFits = amount0a <= max0 && amount1a <= max1;
-        bool bFits = amount0b <= max0 && amount1b <= max1;
-
-        if (aFits && bFits) {
-            // Pick the one that uses more liquidity (usually a)
-            return (liq0 >= liq1) ? (amount0a, amount1a) : (amount0b, amount1b);
-        } else if (aFits) {
-            return (amount0a, amount1a);
-        } else if (bFits) {
-            return (amount0b, amount1b);
-        } else {
-            // fallback: pick the min liquidity as before
-            uint128 liquidity = liq0 < liq1 ? liq0 : liq1;
-            return _getAmountsForLiquidity(liquidity, sqrtA, sqrtB, sqrtP);
-        }
+        amount0 = (baseETH * scale) / 1e18;
+        amount1 = (baseLIM * scale) / 1e18;
     }
 
     /// @notice Internal helper to compute token0 and token1 amounts from liquidity

@@ -331,10 +331,10 @@ async function swap(_zeroForOne, _amountIn, _user) {
 }
 
 async function ownerIncreasesLiquidityByContract(poolHelper, owner, ownerTokenId) {
-  console.log("──────────── Owner Increases Liquidity ─────────────");  
+    console.log("──────────── Owner Increases Liquidity ─────────────");  
     const [extraETH, extraLIM] = await poolHelper.getAmountsForExact(
         ethers.parseEther("1"),
-        0//ethers.parseUnits("600000", 18)
+        0
     );
     console.log(`owner extraETH ${ethers.formatEther(extraETH)}, owner extraLIM ${ethers.formatEther(extraLIM)}`);
 
@@ -346,8 +346,8 @@ async function ownerIncreasesLiquidityByContract(poolHelper, owner, ownerTokenId
 
     //const ethOverestimate = ethers.parseEther("0.06");
     await limToken.connect(owner).approve(poolHelper.target, ethers.parseUnits("20000000000", 18));
-    await poolHelper.connect(owner).increaseLiquidityFromContract(ethers.ZeroAddress, limToken.target, extraETH, extraLIM, ownerTokenId, {
-      value: extraETH,
+    await poolHelper.connect(owner).increaseLiquidityFromContract(ethers.ZeroAddress, limToken.target, extraETH1, extraLIM1, ownerTokenId, {
+      value: extraETH1,
     });
     console.log(`Owner owner increased liquidity by contract!`);
 }
@@ -366,8 +366,8 @@ async function ownerCollectsPositionFees(poolHelper, ownerAddress, ownerTokenId)
     const limAfter = await limToken.balanceOf(ownerAddress);
 
     // Print deltas
-    console.log("💰 ETH collected:", ethAfter - ethBefore);
-    console.log("🪙 LIM collected:", limAfter - limBefore);
+    console.log("💰 ETH collected:", ethers.formatEther(ethAfter - ethBefore));
+    console.log("🪙 LIM collected:", ethers.formatEther(limAfter - limBefore));
     console.log("─────────────────────────────────────────────────");
 }
 

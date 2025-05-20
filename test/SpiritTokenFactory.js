@@ -8,7 +8,7 @@ const POOL_MANAGER = FORK_MAINNET ? "0x360e68faccca8ca495c1b759fd9eee466db9fb32"
 const POSITION_MANAGER = FORK_MAINNET ? "0xd88f38f930b7952f2db2432cb002e7abbf3dd869" : "0xAc631556d3d4019C95769033B5E719dD77124BAc";
 const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 const UNIVERSAL_ROUTER = FORK_MAINNET ? "0xa51afafe0263b40edaef0df8781ea9aa03e381a3" : "0xefd1d4bd4cf1e86da286bb4cb1b8bced9c10ba47";
-const CHAINLINK_PRICE_FEED = FORK_MAINNET ? "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612" : "0x694AA1769357215DE4FAC081bf1f309aDC325306";
+const CHAINLINK_PRICE_FEED = "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612"; // Mainnet only!!! For testnet MockChainlinkPriceFeed deploy is requiered!!!
 
 const POSITION_MANAGER_ABI = [
   {
@@ -132,7 +132,7 @@ const PERMIT2_ABI = [
     }
 ];
 
-let lim, swapHelper, hookAddress;
+let lim, swapHelper, hookAddress, mockPriceAddress;
 
 describe("Liminal Test Contracts: SpiritToken + Factory", function () {
   async function deployFixture() {
@@ -197,6 +197,16 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
     await lim.transfer(user1.address, ethers.parseUnits("70000000", 18));
     await lim.transfer(user2.address, ethers.parseUnits("70000000", 18));
 
+    if(!FORK_MAINNET)
+    {
+      // Deploy MockChainlinkPriceFeed
+      const MockChainlinkPriceFeed = await ethers.getContractFactory("MockChainlinkPriceFeed");
+      const mockPriceFeed = await MockChainlinkPriceFeed.deploy(250000000000); //ETH price is 2500$
+      await mockPriceFeed.waitForDeployment();
+      mockPriceAddress = mockPriceFeed.target;
+      console.log(`MockChainlinkPriceFeed : ${mockPriceFeed.target}`);
+    }
+
     // Uniswap V4 pool key
     const poolKey = {
         currency0: ethers.ZeroAddress,
@@ -216,7 +226,7 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
       redeemFee,
       hookAddress,
       poolId,
-      CHAINLINK_PRICE_FEED
+      FORK_MAINNET ? CHAINLINK_PRICE_FEED : mockPriceAddress
     );
     await factory.waitForDeployment();
 
@@ -273,38 +283,20 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
     const { owner, user1, lim, spirit, factory, redeemFee } = await loadFixture(deployFixture);
 
     // ===== 1. Mint SPIRIT with LIM using pool price =====
-    const spiritAmount = ethers.parseUnits("100", 18); // 100 SPIRIT
-
-    // // 30 dollars = 30 * 100 cents
-    // const thirtyDollarsInCents = 30 * 100; // 3000
-
-    // Get required LIM to mint (live pool price)
-    let requiredLIM = await factory.getRequiredLIMForSpirit(spiritAmount);
-    console.log(`Before swap to mint ${ethers.formatUnits(spiritAmount, 18)} SPIRIT, required LIM (by pool):`, ethers.formatUnits(requiredLIM, 18));
-
-    //let limRequired = await factory.getRequiredLIMforUSD(thirtyDollarsInCents);
-    //console.log("Before swap LIM required for $30:", ethers.formatUnits(limRequired, 18));
-
-    let limFor30 = await factory.getRequiredLIMforUSD(30);
+    let limFor30 = await factory.getRequiredWholeLIMforUSD(30);
     console.log("LIM for $30:", ethers.formatUnits(limFor30, 18));
 
     // Larger swap
-    await swap(true, ethers.parseEther("1.0"), user1); // Swap 5 ETH -> LIM
+    await swap(true, ethers.parseEther("5.0"), user1); // Swap 5 ETH -> LIM
 
-    requiredLIM = await factory.getRequiredLIMForSpirit(spiritAmount);
-    //limRequired = await factory.getRequiredLIMforUSD(thirtyDollarsInCents);
-
-    //console.log("After swap LIM required for $30:", ethers.formatUnits(limRequired, 18));
-    console.log(`After swap to mint ${ethers.formatUnits(spiritAmount, 18)} SPIRIT, required LIM (by pool):`, ethers.formatUnits(requiredLIM, 18));
-
-    limFor30 = await factory.getRequiredLIMforUSD(30);
+    limFor30 = await factory.getRequiredWholeLIMforUSD(30);
     console.log("LIM for $30:", ethers.formatUnits(limFor30, 18));
 
     // Approve and mint
-    await lim.connect(user1).approve(factory.getAddress(), requiredLIM);
+    await lim.connect(user1).approve(factory.getAddress(), limFor30);
 
     const userLIM_beforeMint = await lim.balanceOf(user1.address);
-    await factory.connect(user1).mintSpirit(spiritAmount);
+    await factory.connect(user1).mintSpirit(limFor30);
     const userLIM_afterMint = await lim.balanceOf(user1.address);
     const factoryLIM_afterMint = await lim.balanceOf(factory.getAddress());
 
@@ -314,19 +306,18 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
     console.log("User SPIRIT balance after mint:", ethers.formatUnits(await spirit.balanceOf(user1.address), 18));
 
     // ===== 2. Redeem SPIRIT for LIM (should subtract redeemFee) =====
-    await spirit.connect(user1).approve(factory.getAddress(), spiritAmount);
+    await spirit.connect(user1).approve(factory.getAddress(), limFor30);
 
     // Calculate expected payout at live pool price
-    const limAmount = await factory.getRequiredLIMForSpirit(spiritAmount);
-    const fee = (limAmount * BigInt(redeemFee)) / 10000n;
-    const payout = limAmount - fee;
+    const fee = (limFor30 * BigInt(redeemFee)) / 10000n;
+    const payout = limFor30 - fee;
 
-    console.log("Live LIM amount for redeeming 100 SPIRIT:", ethers.formatUnits(limAmount, 18));
+    console.log(`Live LIM amount for redeeming ${limFor30} SPIRIT:`, ethers.formatUnits(payout, 18));
     console.log("Redeem fee:", ethers.formatUnits(fee, 18));
     console.log("Payout to user:", ethers.formatUnits(payout, 18));
 
     const userLIM_beforeRedeem = await lim.balanceOf(user1.address);
-    await factory.connect(user1).redeemSpirit(spiritAmount);
+    await factory.connect(user1).redeemSpirit(limFor30);
     const userLIM_afterRedeem = await lim.balanceOf(user1.address);
 
     console.log("User LIM balance before redeem:", ethers.formatUnits(userLIM_beforeRedeem, 18));
@@ -355,15 +346,10 @@ describe("Liminal Test Contracts: SpiritToken + Factory", function () {
 
     // ===== 4. Deposit to public reserve =====
     const depositAmount = ethers.parseUnits("1", 18);
-    await lim.connect(user1).approve(factory.getAddress(), depositAmount);
-    await factory.connect(user1).depositToPublicReserve(depositAmount);
+    await lim.connect(owner).approve(factory.getAddress(), depositAmount);
+    await factory.connect(owner).depositToPublicReserve(depositAmount);
     const publicReserve = await factory.publicProtocolReserve();
     console.log("Public reserve after deposit:", ethers.formatUnits(publicReserve, 18));
-
-    // ===== 5. Confirm that the price is live from the Uniswap V4 pool =====
-    const liveRequiredLIM = await factory.getRequiredLIMForSpirit(ethers.parseUnits("100", 18));
-    console.log("Current required LIM to mint 100 SPIRIT (should match pool price):", ethers.formatUnits(liveRequiredLIM, 18));
-    expect(liveRequiredLIM).to.be.gt(0);
   });
 });
 

@@ -72,117 +72,108 @@ contract SpiritTokenFactory is Ownable {
         emit RedeemFeeUpdated(newFee);
     }
 
-    function mintSpirit(uint256 spiritAmount) external {
-        require(spiritAmount > 0, "Invalid SPIRIT amount");
-        uint256 requiredLIM = getRequiredLIMForSpirit(spiritAmount);
+    /// @notice Mint SPIRIT 1:1 for LIM
+    function mintSpirit(uint256 limAmount) external {
+       require(limAmount > 0, "Invalid LIM amount");
 
-        require(
-            limToken.transferFrom(msg.sender, address(this), requiredLIM),
-            "LIM transfer failed"
-        );
-        publicProtocolReserve += requiredLIM;
-        totalSpiritMinted += spiritAmount;
+       // pull limAmount LIM from user
+       require(limToken.transferFrom(msg.sender, address(this), limAmount), "LIM transfer failed");
+       publicProtocolReserve += limAmount;
+       totalSpiritMinted += limAmount;
 
-        spirit.mint(msg.sender, spiritAmount);
-        emit Minted(msg.sender, requiredLIM, spiritAmount);
+       // mint exactly the same amount of SPIRIT
+       spirit.mint(msg.sender, limAmount);
+       emit Minted(msg.sender, limAmount, limAmount);
     }
 
-    function redeemSpirit(uint256 amount) external {
-        require(amount > 0, "Nothing to redeem");
-        uint256 limAmount = getRequiredLIMForSpirit(amount);
-        uint256 fee = (limAmount * redeemFee) / 10000;
-        uint256 payout = limAmount - fee;
-
-        require(
-            limToken.balanceOf(address(this)) >= payout,
-            "Insufficient LIM in reserve"
-        );
-
-        publicProtocolReserve -= limAmount;
+    /// @notice Redeem SPIRIT 1:1 for LIM, minus fee
+    function redeemSpirit(uint256 spiritAmount) external {
+        require(spiritAmount > 0, "Nothing to redeem");
+  
+        // compute fee on the 1:1 LIM redemption
+        uint256 fee = (spiritAmount * redeemFee) / 10000;
+        uint256 payout = spiritAmount - fee;
+  
+        // update reserves & fees
+        publicProtocolReserve -= spiritAmount;
         collectedProtocolFees += fee;
-        totalSpiritBurned += amount;
-
-        spirit.burnFrom(msg.sender, amount);
-        require(
-            limToken.transfer(msg.sender, payout),
-            "LIM transfer failed"
-        );
-        emit Redeemed(msg.sender, amount, payout);
-    }
-
-    function depositToPublicReserve(uint256 amount) external {
-        require(amount > 0, "Amount must be positive");
-        require(
-            limToken.transferFrom(msg.sender, address(this), amount),
-            "LIM transfer failed"
-        );
-        publicProtocolReserve += amount;
-        emit PublicReserveDeposit(msg.sender, amount);
+        totalSpiritBurned += spiritAmount;
+  
+        // burn the SPIRIT, then pay out LIM
+        spirit.burnFrom(msg.sender, spiritAmount);
+        require(limToken.transfer(msg.sender, payout), "LIM transfer failed");
+        emit Redeemed(msg.sender, spiritAmount, payout);
     }
 
     function collectProtocolFees() external onlyOwner {
         require(collectedProtocolFees > 0, "No fees to withdraw");
         uint256 amount = collectedProtocolFees;
         collectedProtocolFees = 0;
-
-        require(
-            limToken.transfer(msg.sender, amount),
-            "LIM transfer failed"
-        );
+        require(limToken.transfer(msg.sender, amount), "LIM transfer failed");
         emit ProtocolFeesCollected(msg.sender, amount);
     }
 
-    /// @notice Calculates the required LIM to mint a given amount of SPIRIT using live pool price.
-    function getRequiredLIMForSpirit(uint256 spiritAmount) public view returns (uint256) {
-        require(spiritAmount > 0, "Invalid SPIRIT amount");
-
-        uint160 sqrtPriceX96 = v4Hook.latestSqrtPriceX96(v4PoolId);
-        require(sqrtPriceX96 > 0, "Pool not initialized");
-
-        // LIM per ETH (token1/token0)
-        uint256 limPerETH = (uint256(sqrtPriceX96) * uint256(sqrtPriceX96)) >> 192;
-        require(limPerETH > 0, "Invalid price");
-
-        // Invert to get ETH per LIM, then calculate required LIM
-        // requiredLIM = spiritAmount * ETH value of 1 SPIRIT / (ETH per LIM)
-        uint256 ethPerLIM = (1e36) / limPerETH; // scale to 18 decimals
-        return (spiritAmount * ethPerLIM) / 1e18;
+    // Emergency only
+    function depositToPublicReserve(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be positive");
+        require(limToken.transferFrom(msg.sender, address(this), amount), "LIM transfer failed");
+        publicProtocolReserve += amount;
+        emit PublicReserveDeposit(msg.sender, amount);
     }
 
-/// @notice How many LIM are needed to buy `usdAmount` USD
-/// @param usdAmount whole dollars (e.g. 30 for $30)
-function getRequiredLIMforUSD(uint256 usdAmount) public view returns (uint256) {
-    require(usdAmount > 0, "Invalid amount");
+    /// @notice How many LIM are needed to buy `usdAmount` USD
+    /// @param usdAmount whole dollars (e.g. 30 for $30)
+    function getRequiredLIMforUSD(uint256 usdAmount) public view returns (uint256) {
+        require(usdAmount > 0, "Invalid amount");
 
-    // 1) Raw LIM per ETH (no scaling)
-    uint160 sqrtPriceX96 = v4Hook.latestSqrtPriceX96(v4PoolId);
-    uint256 rawLIMperETH = (uint256(sqrtPriceX96) * uint256(sqrtPriceX96)) >> 192;
-    require(rawLIMperETH > 0, "Invalid price");
-    //console.log("rawLIMperETH:", rawLIMperETH);
+        // 1) Raw LIM per ETH (no scaling)
+        uint160 sqrtPriceX96 = v4Hook.latestSqrtPriceX96(v4PoolId);
+        uint256 rawLIMperETH = (uint256(sqrtPriceX96) * uint256(sqrtPriceX96)) >> 192;
+        require(rawLIMperETH > 0, "Invalid price");
+        //console.log("rawLIMperETH:", rawLIMperETH);
 
-    // 2) ETH price in USD (Chainlink, 8 decimals)
-    (, int256 answer,,,) = ethUsdOracle.latestRoundData();
-    require(answer > 0, "Invalid ETH price");
-    uint256 ethUsd8 = uint256(answer);
-    //console.log("ethUsd8:", ethUsd8);
+        // 2) ETH price in USD (Chainlink, 8 decimals)
+        (, int256 answer,,,) = ethUsdOracle.latestRoundData();
+        require(answer > 0, "Invalid ETH price");
+        uint256 ethUsd8 = uint256(answer);
+        //console.log("ethUsd8:", ethUsd8);
 
-    // 3) USD per LIM, scaled 8 decimals
-    //    = (USD per ETH) / (LIM per ETH)
-    uint256 priceLIMinUSD_8 = ethUsd8 / rawLIMperETH;
-    //console.log("priceLIMinUSD_8:", priceLIMinUSD_8);
+        // 3) USD per LIM, scaled 8 decimals
+        //    = (USD per ETH) / (LIM per ETH)
+        uint256 priceLIMinUSD_8 = ethUsd8 / rawLIMperETH;
+        //console.log("priceLIMinUSD_8:", priceLIMinUSD_8);
 
-    // 4) How many LIM to cover `usdAmount` dollars?
-    //    usdAmount * 1e8 => USD scaled to 8 decimals
-    uint256 usdScaled8 = usdAmount * 1e8;
-    //console.log("usdScaled8:", usdScaled8);
+        // 4) How many LIM to cover `usdAmount` dollars?
+        //    usdAmount * 1e8 => USD scaled to 8 decimals
+        uint256 usdScaled8 = usdAmount * 1e8;
+        //console.log("usdScaled8:", usdScaled8);
 
-    //    LIM_needed = (usdScaled8 * 1e18) / priceLIMinUSD_8
-    uint256 limNeeded = (usdScaled8 * 1e18) / priceLIMinUSD_8;
-    //console.log("limNeeded:", limNeeded);
+        //    LIM_needed = (usdScaled8 * 1e18) / priceLIMinUSD_8
+        uint256 limNeeded = (usdScaled8 * 1e18) / priceLIMinUSD_8;
+        //console.log("limNeeded:", limNeeded);
 
-    return limNeeded;
+        return limNeeded;
+    }
+
+/// @notice How many whole LIM *wei* are needed to buy `usdAmount` USD:
+///         - reverts if price lookup yields zero
+///         - if the true needed amount is non-zero but < 1 LIM, returns 1 LIM (1e18 wei)
+///         - otherwise floors to whole LIM tokens
+function getRequiredWholeLIMforUSD(uint256 usdAmount) external view returns (uint256) {
+    uint256 rawWei = getRequiredLIMforUSD(usdAmount);  // already in wei
+
+    // revert if something went wrong (e.g. no price, usdAmount==0)
+    require(rawWei > 0, "Invalid LIM amount");
+
+    uint256 ONE_TOKEN = 1e18;
+
+    // bump any non-zero <1 LIM up to exactly 1 LIM
+    if (rawWei < ONE_TOKEN) {
+        return ONE_TOKEN;
+    }
+
+    // otherwise floor down to whole tokens (in wei)
+    return (rawWei / ONE_TOKEN) * ONE_TOKEN;
 }
-
-
 
 }

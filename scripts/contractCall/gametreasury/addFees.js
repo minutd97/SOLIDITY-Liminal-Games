@@ -10,7 +10,7 @@ const {
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
 const {GAME_TREASURY, SPIRIT_TOKEN, SPIRIT_TOKEN_FACTORY} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
-///// WAITING FOR MODIFICATION DO TO SPIRIT TOKEN FACTORY!!!!
+
 async function execute() {
     try {
         setTxLogging(true);
@@ -23,14 +23,15 @@ async function execute() {
         await sendTx(GameTreasury.connect(owner).grantGameContractRole(owner.address), `Grant game contract role for testing`);
 
         const fee = ethers.parseUnits("1000", 18);
-        await lim.approve(treasury.target, fee * 2n);
-        await treasury.addGameFee(token, fee);
-        await treasury.addLiquidityFee(token, fee);
+        await sendTx(SpiritTokenFactory.connect(owner).mintSpirit(fee * 2n), `Mint ${fee * 2n} SPIRIT to owner`);
+        await sendTx(SpiritToken.approve(GAME_TREASURY, fee * 2n), `Approve ${fee * 2n} SPIRIT to game treasury`);
 
-        const user = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
-        const amount = ethers.parseUnits("10000", 18);
-        await sendTx(GameTreasury.connect(owner).transferTokens(user, amount), 
-         `Transfer amount of ${ethers.formatEther(amount)} LIM tokens to ${user}`);
+        await log_TokenBalance(SpiritToken, "SPIRIT", GAME_TREASURY, "Game treasury before");
+
+        await sendTx(GameTreasury.addGameFee(SPIRIT_TOKEN, fee), `Add game fee`);
+        await sendTx(GameTreasury.addLiquidityFee(SPIRIT_TOKEN, fee), `Add liquidity fee`);
+
+        await log_TokenBalance(SpiritToken, "SPIRIT", GAME_TREASURY, "Game treasury after");
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

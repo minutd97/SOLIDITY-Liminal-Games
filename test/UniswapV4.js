@@ -332,11 +332,11 @@ async function swap(_zeroForOne, _amountIn, _user) {
 
 async function ownerIncreasesLiquidityByContract(poolHelper, owner, ownerTokenId) {
     console.log("──────────── Owner Increases Liquidity ─────────────");  
-    const [extraETH, extraLIM] = await poolHelper.getAmountsForExact(
-        ethers.parseEther("1"),
-        0
-    );
-    console.log(`owner extraETH ${ethers.formatEther(extraETH)}, owner extraLIM ${ethers.formatEther(extraLIM)}`);
+    // const [extraETH, extraLIM] = await poolHelper.getAmountsForExact(
+    //     ethers.parseEther("1"),
+    //     0
+    // );
+    // console.log(`owner extraETH ${ethers.formatEther(extraETH)}, owner extraLIM ${ethers.formatEther(extraLIM)}`);
 
     const [extraETH1, extraLIM1] = await poolHelper.getBestAmountsForUserBalance(
         ethers.parseEther("10"),
@@ -366,8 +366,8 @@ async function ownerCollectsPositionFees(poolHelper, ownerAddress, ownerTokenId)
     const limAfter = await limToken.balanceOf(ownerAddress);
 
     // Print deltas
-    console.log("💰 ETH collected:", ethers.formatEther(ethAfter - ethBefore));
-    console.log("🪙 LIM collected:", ethers.formatEther(limAfter - limBefore));
+    console.log("ETH collected:", ethers.formatEther(ethAfter - ethBefore));
+    console.log("LIM collected:", ethers.formatEther(limAfter - limBefore));
     console.log("─────────────────────────────────────────────────");
 }
 
@@ -445,7 +445,7 @@ async function userIncreasesLiquidity(poolHelper, user) {
       0                          // set LIM to zero to indicate ETH-driven
   );
 
-  console.log(`extraETH ${extraETH}, extraLIM ${extraLIM}`);
+  console.log(`extraETH ${ethers.formatEther(extraETH)}, extraLIM ${ethers.formatEther(extraLIM)}`);
 
   // 2) Approve LIM if using LIM (skip if only using ETH)
   if (extraLIM > 0) {
@@ -508,7 +508,7 @@ async function userDecreasesLiquidity(poolHelper, user) {
   const min0 = (expected0 * (10_000n - bps)) / 10_000n;
   const min1 = (expected1 * (10_000n - bps)) / 10_000n;
 
-  console.log("minima :", min0.toString(),   min1.toString());
+  console.log("minima :", ethers.formatEther(min0), ethers.formatEther(min1));
 
   // 3) Build calldata via the helper using those as minimums
   const [actions, params] = await poolHelper.connect(user)
@@ -544,8 +544,8 @@ async function userDecreasesLiquidity(poolHelper, user) {
   const bal0After = await ethers.provider.getBalance(user.address);
   const bal1After = await limToken.balanceOf(user.address);
 
-  console.log(`token0 received: ${bal0After - bal0Before}`);
-  console.log(`token1 received: ${bal1After - bal1Before}`);
+  console.log(`token0 received: ${ ethers.formatEther(bal0After - bal0Before) }`);
+  console.log(`token1 received: ${ ethers.formatEther(bal1After - bal1Before) }`);
   console.log("─────────────────────────────────────────────────");
 }
 
@@ -588,8 +588,8 @@ async function userCollectsPositionFees(poolHelper, user) {
   const ethAfter = await ethers.provider.getBalance(user.address);
   const limAfter = await limToken.balanceOf(user.address);
 
-  console.log("  ETH collected:", (ethAfter - ethBefore).toString());
-  console.log("  LIM collected:", (limAfter - limBefore).toString());
+  console.log("ETH collected:", ethers.formatEther(ethAfter - ethBefore));
+  console.log("LIM collected:", ethers.formatEther(limAfter - limBefore));
   console.log("─────────────────────────────────────────────────");
 }
 
@@ -639,8 +639,8 @@ async function userBurnPosition(poolHelper, user) {
     const ethAfter = await ethers.provider.getBalance(user.address);
     const limAfter = await limToken.balanceOf(user.address);
 
-    console.log("ETH returned:", (ethAfter - ethBefore).toString());
-    console.log("LIM returned:", (limAfter - limBefore).toString());
+    console.log("ETH returned:", ethers.formatEther(ethAfter - ethBefore));
+    console.log("LIM returned:", ethers.formatEther(limAfter - limBefore));
   } catch (err) {
     console.error("❌ burnPosition failed with:", err?.error?.message || err.message);
     throw err;

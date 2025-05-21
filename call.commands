@@ -68,7 +68,23 @@ npx hardhat run scripts/contractCall/teamvesting/revokeVesting.js --network arbi
 #########
 
 # GAME TREASURY
+npx hardhat run scripts/contractCall/gametreasury/addFees.js --network localhost
+npx hardhat run scripts/contractCall/gametreasury/addFees.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/gametreasury/collectGameFees.js --network localhost
+npx hardhat run scripts/contractCall/gametreasury/collectGameFees.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/gametreasury/collectLiquidityFees.js --network localhost
+npx hardhat run scripts/contractCall/gametreasury/collectLiquidityFees.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/gametreasury/transferTokens.js --network localhost
+npx hardhat run scripts/contractCall/gametreasury/transferTokens.js --network arbitrumSepolia
 #########
 
 # UNISWAP V4
+npx hardhat run scripts/contractCall/uniswapv4/userMintPosition.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/userMintPosition.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network arbitrumSepolia
 #########

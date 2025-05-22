@@ -142,5 +142,18 @@ npx hardhat run scripts/contractCall/limstaking/pendingRewards.js --network arbi
 #########
 
 # LP STAKING REWARDS
+npx hardhat run scripts/contractCall/lpstaking/stakePosition.js --network localhost
+npx hardhat run scripts/contractCall/lpstaking/stakePosition.js --network arbitrumSepolia
 
+npx hardhat run scripts/contractCall/lpstaking/getPendingAndLoked.js --network localhost
+npx hardhat run scripts/contractCall/lpstaking/getPendingAndLoked.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/lpstaking/claimFromLp.js --network localhost
+npx hardhat run scripts/contractCall/lpstaking/claimFromLp.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/lpstaking/unstakePosition.js --network localhost
+npx hardhat run scripts/contractCall/lpstaking/unstakePosition.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/lpstaking/ownerBurnAccumulated.js --network localhost
+npx hardhat run scripts/contractCall/lpstaking/ownerBurnAccumulated.js --network arbitrumSepolia
 #########

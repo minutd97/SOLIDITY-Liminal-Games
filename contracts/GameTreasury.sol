@@ -47,7 +47,7 @@ contract GameTreasury is Ownable, AccessControl {
     }
 
     /// @notice Adds fully unlocked game fee tokens
-    function receiveGameFeeTokens(uint256 amount) external onlyRole(POOL_LOADER_ROLE) {
+    function receiveGameFeeTokens(uint256 amount) external onlyOwner {
         limToken.transferFrom(msg.sender, address(this), amount);
         gameFeeFunds += amount;
     }

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "./LiminalToken.sol";
 
@@ -22,7 +23,7 @@ interface IV4PoolHelper {
 }
 
 /// @title LiminalPresale - Handles the contribution, distribution, and liquidity setup for LIM token presale
-contract LiminalPresale is Ownable {
+contract LiminalPresale is Ownable, ReentrancyGuard {
     LiminalToken public immutable limToken; // LiminalToken contract used for presale and liquidity
     address public immutable v4PoolHelper; // Address of the Uniswap V4 pool helper contract
     
@@ -82,7 +83,7 @@ contract LiminalPresale is Ownable {
     }
 
     /// @notice Allows users to contribute ETH to the presale within limits
-    function contribute() external payable onlyWhileActive {
+    function contribute() external payable nonReentrant onlyWhileActive {
         require(msg.value >= WALLET_MIN_CONTRIBUTION, "Contribution is below minimum");
         require(presaleContributions[msg.sender] + msg.value <= WALLET_MAX_CONTRIBUTION, "Contribution exceeds wallet limit");
 

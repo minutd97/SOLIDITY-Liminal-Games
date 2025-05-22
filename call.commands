@@ -79,6 +79,9 @@ npx hardhat run scripts/contractCall/gametreasury/collectLiquidityFees.js --netw
 
 npx hardhat run scripts/contractCall/gametreasury/transferTokens.js --network localhost
 npx hardhat run scripts/contractCall/gametreasury/transferTokens.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/gametreasury/ownerSendFees.js --network localhost
+npx hardhat run scripts/contractCall/gametreasury/ownerSendFees.js --network arbitrumSepolia
 #########
 
 # UNISWAP V4

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { IUniversalRouter } from "@uniswap/universal-router/contracts/interfaces/IUniversalRouter.sol";
 import { Commands } from "@uniswap/universal-router/contracts/libraries/Commands.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
@@ -15,7 +17,7 @@ import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 /// @title V4SwapHelper
 /// @notice Facilitates single-token swaps using Uniswap V4 and the Universal Router. 
 ///         Primarily intended for backend-triggered or automated swaps initiated by the contract owner.
-contract V4SwapHelper {
+contract V4SwapHelper is Ownable, ReentrancyGuard {
     using CurrencyLibrary for Currency;
 
     IUniversalRouter public immutable router; // Uniswap Universal Router contract used for executing multicalls
@@ -26,20 +28,20 @@ contract V4SwapHelper {
     event SwapExecuted(address indexed user, uint256 amountOut);
 
     /// @notice Sets the router, poolManager, and permit2 addresses for interacting with Uniswap V4
-    constructor(address _router, address _poolManager, address _permit2) {
+    constructor(address _router, address _poolManager, address _permit2) Ownable(msg.sender) {
         router = IUniversalRouter(_router);
         poolManager = IPoolManager(_poolManager);
         permit2 = IPermit2(_permit2);
     }
 
     /// @notice Grants full token approval to Permit2 and allows Universal Router to spend tokens
-    function approveTokenWithPermit2(address token) external {
+    function approveTokenWithPermit2(address token) external onlyOwner {
         IERC20(token).approve(address(permit2), type(uint256).max);
         permit2.approve(token, address(router), type(uint160).max, type(uint48).max);
     }
 
     /// @notice Executes a single-token swap using Uniswap V4 Universal Router, supports ETH and ERC20 input
-    function swapExactInputSingle(PoolKey calldata key, bool zeroForOne, uint128 amountIn, uint128 minAmountOut) external payable {
+    function swapExactInputSingle(PoolKey calldata key, bool zeroForOne, uint128 amountIn, uint128 minAmountOut) external payable nonReentrant {
         if (!zeroForOne) {
             address tokenIn = address(uint160(Currency.unwrap(key.currency1)));
             IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn);

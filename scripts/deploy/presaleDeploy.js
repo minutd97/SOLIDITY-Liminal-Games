@@ -40,6 +40,7 @@ async function deploy() {
     
         // Deploy V4SwapHelper
         const swapHelper = await deployContract("V4SwapHelper", owner, [UNIVERSAL_ROUTER, POOL_MANAGER, PERMIT2_ADDRESS]);
+        await sendTx(swapHelper.connect(owner).approveTokenWithPermit2(limToken.target), "Approve token with permit2 to swap helper");
 
         // Deploy LiminalPresale
         const minEthRequiered = ethers.parseEther("0.5");

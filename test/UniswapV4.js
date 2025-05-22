@@ -488,11 +488,7 @@ async function userIncreasesLiquidity(poolHelper, user) {
 async function userDecreasesLiquidity(poolHelper, user) {
   console.log("──────────── User Decreases Liquidity ─────────────");
 
-  const positionManager = new ethers.Contract(
-      POSITION_MANAGER,
-      POSITION_MANAGER_ABI,
-      user
-  );
+  const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
 
   // 1) Fetch the user’s tokenId & current liquidity via positionInfo
   let currentLiq = await positionManager.getPositionLiquidity(tokenId);
@@ -551,16 +547,10 @@ async function userDecreasesLiquidity(poolHelper, user) {
 
 async function userCollectsPositionFees(poolHelper, user) {
   console.log("──────────── User Collects Fees ─────────────");
-  const positionManager = new ethers.Contract(
-    POSITION_MANAGER,
-    POSITION_MANAGER_ABI,
-    user
-  );
+  const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
 
   // 1) prepare calldata via your new helper
-  const [actions, params] = await poolHelper
-    .connect(user)
-    .buildCollectFeesParamsForUser(
+  const [actions, params] = await poolHelper.connect(user).buildCollectFeesParamsForUser(
       ethers.ZeroAddress,  // token0 (ETH)
       limToken.target,     // token1 (LIM)
       tokenId
@@ -578,9 +568,7 @@ async function userCollectsPositionFees(poolHelper, user) {
   const limBefore = await limToken.balanceOf(user.address);
 
   // 3) call modifyLiquidities (collect fees)
-  const tx = await positionManager
-    .connect(user)
-    .modifyLiquidities(inner, deadline, { value: 0 });
+  const tx = await positionManager.connect(user).modifyLiquidities(inner, deadline, { value: 0 });
   const receipt = await tx.wait();
   console.log(`✅ userCollectsPositionFees() done, Gas Used: ${receipt.gasUsed}`);
 
@@ -594,12 +582,7 @@ async function userCollectsPositionFees(poolHelper, user) {
 }
 
 async function userBurnPosition(poolHelper, user) {
-  const positionManager = new ethers.Contract(
-    POSITION_MANAGER,
-    POSITION_MANAGER_ABI,
-    user
-  );
-
+  const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
   console.log("— Burning position tokenId =", tokenId.toString());
 
   try {
@@ -610,15 +593,13 @@ async function userBurnPosition(poolHelper, user) {
     throw e;
   }
 
-  const [actions, params] = await poolHelper
-    .connect(user)
-    .buildBurnPositionParamsForUser(
+  const [actions, params] = await poolHelper.connect(user).buildBurnPositionParamsForUser(
       ethers.ZeroAddress,      // token0 = ETH
       limToken.target,         // token1 = LIM
       0n,
       0n,
       tokenId
-    );
+  );
 
   const inner = ethers.AbiCoder.defaultAbiCoder().encode(
     ["bytes", "bytes[]"],

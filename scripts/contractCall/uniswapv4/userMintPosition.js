@@ -6,6 +6,7 @@ const {
     getProvider,
     sendTx,
     setTxLogging,
+    returnTokenId,
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
@@ -82,28 +83,6 @@ async function execute() {
         console.error("❌ Execution failed:", error);
         process.exit(1);
     }
-}
-
-async function returnTokenId(positionManager, user, receipt) {
-  // 1) Define the event filter for Transfer(0x0 → user)
-  const filter = positionManager.filters.Transfer(
-    ethers.ZeroAddress,
-    user.address
-  );
-
-  // 2) Query only the current block for matching events
-  const events = await positionManager.queryFilter(
-    filter,
-    receipt.blockNumber,
-    receipt.blockNumber
-  );
-
-  // 3) Pull out the last matching event (should be your mint)
-  if (events.length === 0) {
-    throw new Error("No mint Transfer event found");
-  }
-  var id = events[events.length - 1].args.tokenId;
-  return id;
 }
 
 execute();

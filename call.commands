@@ -82,9 +82,30 @@ npx hardhat run scripts/contractCall/gametreasury/transferTokens.js --network ar
 #########
 
 # UNISWAP V4
+npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/uniswapv4/ownerIncreaseLiquidity.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/ownerIncreaseLiquidity.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/uniswapv4/onwerCollectFees.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/onwerCollectFees.js --network arbitrumSepolia
+
 npx hardhat run scripts/contractCall/uniswapv4/userMintPosition.js --network localhost
 npx hardhat run scripts/contractCall/uniswapv4/userMintPosition.js --network arbitrumSepolia
 
-npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/userIncreaseLiquidity.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/userIncreaseLiquidity.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/uniswapv4/userDecreaseLiquidity.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/userDecreaseLiquidity.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/uniswapv4/userCollectsFees.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/userCollectsFees.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/uniswapv4/userBurnLiquidity.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/userBurnLiquidity.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/uniswapv4/userSwap.js --network localhost
+npx hardhat run scripts/contractCall/uniswapv4/userSwap.js --network arbitrumSepolia
 #########

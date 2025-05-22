@@ -123,3 +123,24 @@ npx hardhat run scripts/contractCall/spiritfactory/ownerCollectsFees.js --networ
 npx hardhat run scripts/contractCall/spiritfactory/ownerDepositReserve.js --network localhost
 npx hardhat run scripts/contractCall/spiritfactory/ownerDepositReserve.js --network arbitrumSepolia
 #########
+
+# LIMINAL STAKING POOL
+npx hardhat run scripts/contractCall/limstaking/stakeLim.js --network localhost
+npx hardhat run scripts/contractCall/limstaking/stakeLim.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/limstaking/claimLim.js --network localhost
+npx hardhat run scripts/contractCall/limstaking/claimLim.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/limstaking/claimLim.js --network localhost
+npx hardhat run scripts/contractCall/limstaking/claimLim.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/limstaking/unstakeLim.js --network localhost
+npx hardhat run scripts/contractCall/limstaking/unstakeLim.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/limstaking/pendingRewards.js --network localhost
+npx hardhat run scripts/contractCall/limstaking/pendingRewards.js --network arbitrumSepolia
+#########
+
+# LP STAKING REWARDS
+
+#########

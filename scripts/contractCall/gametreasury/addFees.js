@@ -9,13 +9,14 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {GAME_TREASURY, SPIRIT_TOKEN, SPIRIT_TOKEN_FACTORY} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {GAME_TREASURY, SPIRIT_TOKEN, SPIRIT_TOKEN_FACTORY, LIMINAL_TOKEN} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function execute() {
     try {
         setTxLogging(true);
         const provider = getProvider();
         const owner = new ethers.Wallet(getOwner(), provider);
+        const LiminalToken = await ethers.getContractAt("LiminalToken", LIMINAL_TOKEN, owner);
         const GameTreasury = await ethers.getContractAt("GameTreasury", GAME_TREASURY, owner);
         const SpiritToken = await ethers.getContractAt("SpiritToken", SPIRIT_TOKEN, owner);
         const SpiritTokenFactory = await ethers.getContractAt("SpiritTokenFactory", SPIRIT_TOKEN_FACTORY, owner);
@@ -23,9 +24,10 @@ async function execute() {
         await sendTx(GameTreasury.connect(owner).grantGameContractRole(owner.address), `Grant game contract role for testing`);
 
         const fee = ethers.parseUnits("1000", 18);
+        await sendTx(LiminalToken.connect(owner).approve(SPIRIT_TOKEN_FACTORY, fee * 2n), `Approve ${fee * 2n} LIM to factory`);
         await sendTx(SpiritTokenFactory.connect(owner).mintSpirit(fee * 2n), `Mint ${fee * 2n} SPIRIT to owner`);
+        
         await sendTx(SpiritToken.approve(GAME_TREASURY, fee * 2n), `Approve ${fee * 2n} SPIRIT to game treasury`);
-
         await log_TokenBalance(SpiritToken, "SPIRIT", GAME_TREASURY, "Game treasury before");
 
         await sendTx(GameTreasury.addGameFee(SPIRIT_TOKEN, fee), `Add game fee`);

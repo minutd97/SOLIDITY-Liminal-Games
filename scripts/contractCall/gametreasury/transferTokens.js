@@ -20,8 +20,7 @@ async function execute() {
 
         const user = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
         const amount = ethers.parseUnits("10000", 18);
-        await sendTx(GameTreasury.connect(owner).transferTokens(user, amount), 
-         `Transfer amount of ${ethers.formatEther(amount)} LIM tokens to ${user}`);
+        await sendTx(GameTreasury.connect(owner).transferTokens(user, amount), `Transfer amount of ${ethers.formatEther(amount)} LIM tokens to ${user}`);
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

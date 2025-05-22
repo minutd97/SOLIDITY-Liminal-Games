@@ -109,3 +109,17 @@ npx hardhat run scripts/contractCall/uniswapv4/userBurnLiquidity.js --network ar
 npx hardhat run scripts/contractCall/uniswapv4/userSwap.js --network localhost
 npx hardhat run scripts/contractCall/uniswapv4/userSwap.js --network arbitrumSepolia
 #########
+
+# SPIRIT TOKEN FACTORY
+npx hardhat run scripts/contractCall/spiritfactory/mintSpirit.js --network localhost
+npx hardhat run scripts/contractCall/spiritfactory/mintSpirit.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/spiritfactory/burnSpirit.js --network localhost
+npx hardhat run scripts/contractCall/spiritfactory/burnSpirit.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/spiritfactory/ownerCollectsFees.js --network localhost
+npx hardhat run scripts/contractCall/spiritfactory/ownerCollectsFees.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/spiritfactory/ownerDepositReserve.js --network localhost
+npx hardhat run scripts/contractCall/spiritfactory/ownerDepositReserve.js --network arbitrumSepolia
+#########

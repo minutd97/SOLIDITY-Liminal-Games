@@ -23,6 +23,15 @@ npx hardhat run scripts/deploy/limGovernorDeploy.js --network arbitrumSepolia
 #########
 
 # Contract calls
+npx hardhat run scripts/contractCall/transferToken.js --network localhost
+npx hardhat run scripts/contractCall/transferToken.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/transferETH.js --network localhost
+npx hardhat run scripts/contractCall/transferETH.js --network arbitrumSepolia
+
+npx hardhat run scripts/contractCall/logTokenAndETHBalance.js --network localhost
+npx hardhat run scripts/contractCall/logTokenAndETHBalance.js --network arbitrumSepolia
+
 # LIMINAL PRESALE
 npx hardhat run scripts/contractCall/liminalpresale/startPresale.js --network localhost
 npx hardhat run scripts/contractCall/liminalpresale/startPresale.js --network arbitrumSepolia

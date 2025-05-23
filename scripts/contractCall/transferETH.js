@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-verify");
 require("dotenv").config();
+const path = require("path");
 const { ethers } = require("hardhat");
 const {
     getOwner,

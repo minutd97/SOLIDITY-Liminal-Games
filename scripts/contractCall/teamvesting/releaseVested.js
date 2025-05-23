@@ -9,7 +9,7 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {LIMINAL_TOKEN, LIMINAL_STAKING_POOL} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {TEAM_VESTING_CONTROLLER, LIMINAL_TOKEN} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function execute() {
     try {
@@ -17,13 +17,16 @@ async function execute() {
         const provider = getProvider();
         const user = new ethers.Wallet(process.env.TESTNET_USER_PRIVATE_KEY, provider);
         const LiminalToken = await ethers.getContractAt("LiminalToken", LIMINAL_TOKEN, user);
-        const LiminalStakingPool = await ethers.getContractAt("LiminalStakingPool", LIMINAL_STAKING_POOL, user);
+        const TeamVestingController = await ethers.getContractAt("TeamVestingController", TEAM_VESTING_CONTROLLER, user);
 
-        const unstakeAmount = await LiminalStakingPool.getStakedAmount(user.address);
-        await log_TokenBalance(LiminalToken, "LIM", user.address, "User");
-        await sendTx(LiminalStakingPool.connect(user).unstake(unstakeAmount), `Unstake and Claim LIM from staking pool`);
-        await log_TokenBalance(LiminalToken, "LIM", user.address, "User");
+        const beneficiary = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
 
+        const limBefore = await LiminalToken.balanceOf(user.address);
+        await sendTx(TeamVestingController.releaseVestedERC20(beneficiary, LIMINAL_TOKEN), `Release vesting for: ${beneficiary}`);
+        const limAfter = await LiminalToken.balanceOf(user.address);
+    
+        console.log("LIM collected:", ethers.formatEther(limAfter - limBefore));
+        
         console.log("✅ Execution Succeded !");
         process.exit(0);
     } catch (error) {

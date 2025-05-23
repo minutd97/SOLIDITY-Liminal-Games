@@ -20,8 +20,8 @@ async function execute() {
 
         console.log("\n🚀 Starting presale...");
 
-        const presaleDuration = 5 * 60; // 5 minutes
-        await sendTx(LiminalPresale.connect(owner).startPresale(presaleDuration), `Starting presale with ${presaleDuration} duration`);
+        const presaleDuration = 30; // 2 minutes
+        await sendTx(LiminalPresale.connect(owner).startPresale(presaleDuration), `Starting presale with ${presaleDuration} seconds duration`);
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

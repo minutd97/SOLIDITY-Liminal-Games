@@ -20,9 +20,9 @@ async function execute() {
         const SpiritToken = await ethers.getContractAt("SpiritToken", SPIRIT_TOKEN, owner);
         const SpiritTokenFactory = await ethers.getContractAt("SpiritTokenFactory", SPIRIT_TOKEN_FACTORY, owner);
 
-        const ownerLIM_before = await lim.balanceOf(owner.address);
+        const ownerLIM_before = await LiminalToken.balanceOf(owner.address);
         await sendTx(await SpiritTokenFactory.connect(owner).collectProtocolFees(), `Collect fees from factory`);
-        const ownerLIM_after = await lim.balanceOf(owner.address);
+        const ownerLIM_after = await LiminalToken.balanceOf(owner.address);
 
         console.log("Owner LIM before fee collect:", ethers.formatUnits(ownerLIM_before, 18));
         console.log("Owner LIM after fee collect:", ethers.formatUnits(ownerLIM_after, 18));

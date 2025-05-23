@@ -23,9 +23,9 @@ async function execute() {
         const V4PoolHelper = await ethers.getContractAt("V4PoolHelper", V4_POOL_HELPER, owner);
         
         // WE NEED TO KNOW THE POOL TOKEN ID!!!!
-        const ownerTokenId = 0;
+        const ownerTokenId = 30;
         // WE ALSO NEED TO KNOW HOW MUCH TOKENS WE ARE WILLING TO SEND IN LIQUIDITY!
-        const [extraETH1, extraLIM1] = await V4PoolHelper.getBestAmountsForUserBalance(ethers.parseEther("10"), ethers.parseEther("1000000"));
+        const [extraETH1, extraLIM1] = await V4PoolHelper.getBestAmountsForUserBalance(ethers.parseEther("0.001"), ethers.parseEther("1000000"));
         
         console.log(`owner extraETH1 ${ethers.formatEther(extraETH1)}, owner extraLIM1 ${ethers.formatEther(extraLIM1)}`);
         

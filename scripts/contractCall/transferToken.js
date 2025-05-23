@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-verify");
 require("dotenv").config();
+const path = require("path");
 const { ethers } = require("hardhat");
 const {
     getOwner,
@@ -12,10 +13,10 @@ async function main() {
     const owner = new ethers.Wallet(getOwner(), provider);
     const user = new ethers.Wallet(process.env.TESTNET_USER_PRIVATE_KEY, provider);
 
-    const TO = user.address;
-    const AMOUNT = ethers.parseUnits("100", 18);   // Replace "100" and decimals if needed
+    const TO = owner.address;
+    const AMOUNT = ethers.parseUnits("1000000", 18);   // Replace "100" and decimals if needed
 
-    const signer = owner;
+    const signer = user;
     const erc20 = await ethers.getContractAt("IERC20", LIMINAL_TOKEN, signer);
 
     const tx = await erc20.transfer(TO, AMOUNT);

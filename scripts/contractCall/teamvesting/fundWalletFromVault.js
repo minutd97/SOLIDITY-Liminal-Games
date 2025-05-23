@@ -18,7 +18,7 @@ async function execute() {
         const owner = new ethers.Wallet(getOwner(), provider);
         const TeamVestingVault = await ethers.getContractAt("TeamVestingVault", TEAM_VESTING_VAULT, owner);
     
-        const beneficiary = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
+        const beneficiary = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
         const amount = ethers.parseEther("100000"); // 100k
 
         await sendTx(TeamVestingVault.connect(owner).releaseTokensTo(beneficiary, LIMINAL_TOKEN, amount),

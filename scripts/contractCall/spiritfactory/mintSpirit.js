@@ -21,7 +21,7 @@ async function execute() {
         const SpiritTokenFactory = await ethers.getContractAt("SpiritTokenFactory", SPIRIT_TOKEN_FACTORY, user);
 
         limFor1 = await SpiritTokenFactory.getRequiredWholeLIMforUSD(1);
-        console.log("LIM for $30:", ethers.formatUnits(limFor1, 18));
+        console.log("LIM for $1:", ethers.formatUnits(limFor1, 18));
 
         await sendTx(LiminalToken.connect(user).approve(SPIRIT_TOKEN_FACTORY, limFor1), `Approve ${limFor1} LIM to factory`);
         await sendTx(SpiritTokenFactory.connect(user).mintSpirit(limFor1), `Mint ${limFor1} SPIRIT to user`);

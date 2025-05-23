@@ -35,15 +35,15 @@ async function deployContract(name, signer, args = []) {
 async function sendTx(txPromise, label = "tx") {
   const tx = await txPromise;
 
-  if(txLogging)
+  if (txLogging)
     console.log(`⏳ Waiting for ${label}...`);
 
-  await tx.wait();
+  const receipt = await tx.wait(); // <- THIS is what we need to return
 
-  if(txLogging)
+  if (txLogging)
     console.log(`✅ ${label} confirmed:`, tx.hash);
 
-  return tx;
+  return receipt; // ✅ return the mined receipt, not the tx object
 }
 
 async function verifyContract(address, constructorArgs = [], contractPath = undefined) {
@@ -86,25 +86,39 @@ async function log_EthBalance(address, name) {
 }
 
 async function returnTokenId(positionManager, user, receipt) {
-  // 1) Define the event filter for Transfer(0x0 → user)
-  const filter = positionManager.filters.Transfer(
-    ethers.ZeroAddress,
-    user.address
-  );
+  const iface = new ethers.Interface([
+    "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+  ]);
 
-  // 2) Query only the current block for matching events
-  const events = await positionManager.queryFilter(
-    filter,
-    receipt.blockNumber,
-    receipt.blockNumber
-  );
+  const normalizedUser = ethers.getAddress(user);
 
-  // 3) Pull out the last matching event (should be your mint)
-  if (events.length === 0) {
-    throw new Error("No mint Transfer event found");
+  for (const log of receipt.logs) {
+    try {
+      if (log.address.toLowerCase() === positionManager.target.toLowerCase()) {
+        const parsed = iface.parseLog(log);
+        if (
+          parsed.name === "Transfer" &&
+          parsed.args.from === ethers.ZeroAddress &&
+          parsed.args.to.toLowerCase() === normalizedUser.toLowerCase()
+        ) {
+          return parsed.args.tokenId;
+        }
+      }
+    } catch (_) {
+      // Not a Transfer event or bad log, skip
+    }
   }
-  var id = events[events.length - 1].args.tokenId;
-  return id;
+
+  console.log("📜 Receipt logs:");
+  for (const log of receipt.logs) {
+  console.log({
+    address: log.address,
+    topics: log.topics,
+    data: log.data
+  });
+  }
+
+  throw new Error("No mint Transfer event found in logs");
 }
 
 module.exports = {

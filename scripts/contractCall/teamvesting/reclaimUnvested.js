@@ -9,18 +9,25 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {TEAM_VESTING_CONTROLLER, LIMINAL_TOKEN} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {TEAM_VESTING_CONTROLLER, LIMINAL_TOKEN, TEAM_VESTING_VAULT} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function execute() {
     try {
         setTxLogging(true);
         const provider = getProvider();
         const owner = new ethers.Wallet(getOwner(), provider);
+        const LiminalToken = await ethers.getContractAt("LiminalToken", LIMINAL_TOKEN, owner);
         const TeamVestingController = await ethers.getContractAt("TeamVestingController", TEAM_VESTING_CONTROLLER, owner);
     
+        const limBefore = await LiminalToken.balanceOf(TEAM_VESTING_VAULT);
+
         const beneficiary = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
         await sendTx(TeamVestingController.connect(owner).reclaimUnvestedERC20(beneficiary, LIMINAL_TOKEN), 
             `Reclaiming unvested LIM tokens from : ${beneficiary}`);
+
+        const limAfter = await LiminalToken.balanceOf(TEAM_VESTING_VAULT);
+    
+        console.log("LIM collected:", ethers.formatEther(limAfter - limBefore));
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

@@ -9,18 +9,17 @@ const {
     log_TokenBalance,
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
-const {LIMINAL_TOKEN, LIMINAL_STAKING_POOL} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
+const {LIMINAL_PRESALE} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
 
 async function execute() {
     try {
         setTxLogging(true);
         const provider = getProvider();
         const user = new ethers.Wallet(process.env.TESTNET_USER_PRIVATE_KEY, provider);
-        const LiminalToken = await ethers.getContractAt("LiminalToken", LIMINAL_TOKEN, user);
-        const LiminalStakingPool = await ethers.getContractAt("LiminalStakingPool", LIMINAL_STAKING_POOL, user);
+        const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, user);
 
-        const pending = await LiminalStakingPool.pendingReward(user.address);
-        console.log(`User pending rewards: ${ethers.formatEther(pending)}`)
+        const ethValue = ethers.parseEther("0.5");
+        await sendTx(LiminalPresale.connect(user).contribute({ value: ethValue }), `Contribute ${ethValue} ETH to presale`);
 
         console.log("✅ Execution Succeded !");
         process.exit(0);

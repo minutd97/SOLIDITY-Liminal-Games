@@ -19,7 +19,7 @@ async function execute() {
         const AirdropDistributor = await ethers.getContractAt("AirdropDistributor", AIRDROP, owner);
 
         const user = "0xD580273B481c6acb42eB979DF6a369eB657B1CE9";
-        const amount = ethers.parseUnits("10000", 18);
+        const amount = ethers.parseUnits("1", 18);
         await sendTx(AirdropDistributor.connect(owner).setClaimable(user, amount), 
          `Set claimable for ${user} with an amount of ${ethers.formatEther(amount)}`);
 

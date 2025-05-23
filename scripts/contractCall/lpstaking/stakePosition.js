@@ -25,7 +25,7 @@ async function execute() {
         const LPStakingRewards = await ethers.getContractAt("LPStakingRewards", LP_STAKING_REWARDS, user);
         
         const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
-        const tokenId = 0; // WE NEED TO KNOW THE POOL TOKEN ID!!!!
+        const tokenId = 34; // WE NEED TO KNOW THE POOL TOKEN ID!!!!
 
         await sendTx(positionManager.connect(user).approve(LP_STAKING_REWARDS, tokenId), `Approve tokenId ${tokenId} to position manager`);
         await sendTx(LPStakingRewards.connect(user).stake(tokenId), `Stake tokenId ${tokenId} lp staking rewards`);

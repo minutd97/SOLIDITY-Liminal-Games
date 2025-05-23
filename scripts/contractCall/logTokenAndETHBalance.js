@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-verify");
 require("dotenv").config();
+const path = require("path");
 const { ethers } = require("hardhat");
 const {
     getOwner,
@@ -15,8 +16,9 @@ async function main() {
     const user = new ethers.Wallet(process.env.TESTNET_USER_PRIVATE_KEY, provider);
     const LiminalToken = await ethers.getContractAt("LiminalToken", LIMINAL_TOKEN, user);
 
-    await log_TokenBalance(LiminalToken, "LIM", owner.address, "Owner");
-    await log_EthBalance(owner.address, "Owner");
+    const addr = user.address;
+    await log_TokenBalance(LiminalToken, "LIM", addr, "This address");
+    await log_EthBalance(addr, "This address");
 
     console.log(`✅ Execution complete`);
 }

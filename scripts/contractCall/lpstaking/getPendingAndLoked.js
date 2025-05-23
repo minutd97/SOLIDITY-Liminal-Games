@@ -21,11 +21,9 @@ async function execute() {
         setTxLogging(true);
         const provider = getProvider();
         const user = new ethers.Wallet(process.env.TESTNET_USER_PRIVATE_KEY, provider);
-        const LiminalToken = await ethers.getContractAt("LiminalToken", LIMINAL_TOKEN, user);
         const LPStakingRewards = await ethers.getContractAt("LPStakingRewards", LP_STAKING_REWARDS, user);
         
-        const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);
-        const tokenId = 0; // WE NEED TO KNOW THE POOL TOKEN ID!!!!
+        const tokenId = 34; // WE NEED TO KNOW THE POOL TOKEN ID!!!!
 
         let [claim1, burn1] = await LPStakingRewards.getPending(tokenId);
         let locked1 = await LPStakingRewards.getLocked(tokenId);

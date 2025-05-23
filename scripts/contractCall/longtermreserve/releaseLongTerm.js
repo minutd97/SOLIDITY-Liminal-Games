@@ -18,7 +18,10 @@ async function execute() {
         const owner = new ethers.Wallet(getOwner(), provider);
         const LongTermReserve = await ethers.getContractAt("LongTermReserve", LONG_TERM_RESERVE, owner);
 
-        const amount = ethers.parseUnits("10000", 18);
+        const releasable = await LongTermReserve.releasable();
+        console.log(`Releasable tokens : ${ethers.formatEther(releasable)}`);
+
+        const amount = ethers.parseUnits("10", 18);
         await sendTx(LongTermReserve.connect(owner).release(amount), 
          `Releasing an amount of ${ethers.formatEther(amount)}`);
 

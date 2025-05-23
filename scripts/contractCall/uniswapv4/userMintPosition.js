@@ -32,23 +32,23 @@ async function execute() {
         const permit2 = new ethers.Contract(PERMIT2_ADDRESS, PERMIT2_ABI, user);
 
         // 2) Define how much the user wants to deposit
-        const [finalETH, finalLIM] = await V4PoolHelper.getAmountsForExact(ethers.parseEther("0.1"), 0);
+        const [finalETH, finalLIM] = await V4PoolHelper.getAmountsForExact(ethers.parseEther("0.001"), 0);
         console.log("Exact amounts needed → ETH:", ethers.formatEther(finalETH), "LIM:", ethers.formatEther(finalLIM));
 
         // 3a) Approve the ERC-20 itself so Permit2 can pull your LIM
-        await LiminalToken.connect(user).approve(PERMIT2_ADDRESS, finalLIM);
+        await sendTx(LiminalToken.connect(user).approve(PERMIT2_ADDRESS, finalLIM), "Approve the ERC-20 itself so Permit2 can pull your LIM");
         //const erc20Allow = await limToken.allowance(user.address, PERMIT2_ADDRESS);
         //console.log("🛠 ERC20 → Permit2 allowance:", erc20Allow.toString());    
 
         // 3b) Approve Permit2
         const expiration = Math.floor(Date.now()/1000) + 60*60*24*365; // one year from now
         const MAX_ALLOW = (1n << 160n) - 1n;
-        await permit2.connect(user).approve(LIMINAL_TOKEN, POSITION_MANAGER, MAX_ALLOW, expiration);
+        await sendTx(permit2.connect(user).approve(LIMINAL_TOKEN, POSITION_MANAGER, MAX_ALLOW, expiration), "Approve Permit2");
 
         // 4) Build the PoolInput object expected by your helper
         const poolInput = {
             token0:     ethers.ZeroAddress,
-            token1:     limToken.target,
+            token1:     LIMINAL_TOKEN,
             amount0:    finalETH,
             amount1:    finalLIM,
             fee:        5000,
@@ -58,7 +58,7 @@ async function execute() {
         };
         
         // 5) Build the PoolInput and fetch the Uniswap call data
-        const [ actions, params ] = await poolHelper.connect(user).buildMintParamsForUser(poolInput);
+        const [ actions, params ] = await V4PoolHelper.connect(user).buildMintParamsForUser(poolInput);
     
         // 6) Pack the inner encode for modifyLiquidities
         const inner = ethers.AbiCoder.defaultAbiCoder().encode(
@@ -74,7 +74,7 @@ async function execute() {
         const gasUsed = receipt.gasUsed;
         console.log(`✅ userMintPosition() completed, Gas Used in units: ${gasUsed}`);
         
-        tokenId = await returnTokenId(positionManager, user, receipt);
+        const tokenId = await returnTokenId(positionManager, user.address, receipt);
         console.log("🆔 Minted Position tokenId =", tokenId.toString());
 
         console.log("✅ Execution Succeded !");

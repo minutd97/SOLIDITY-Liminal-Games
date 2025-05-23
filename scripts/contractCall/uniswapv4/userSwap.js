@@ -23,10 +23,10 @@ async function execute() {
         const provider = getProvider();
         const user = new ethers.Wallet(process.env.TESTNET_USER_PRIVATE_KEY, provider);
         const LiminalToken = await ethers.getContractAt("LiminalToken", LIMINAL_TOKEN, user);
-        const V4SwapHelper = await ethers.getContractAt("V4SwapHelper", V4_POOL_HELPER, user);
+        const V4SwapHelper = await ethers.getContractAt("V4SwapHelper", V4_SWAP_HELPER, user);
 
-        const _zeroForOne = true; //true for ETH -> LIM, false for LIM -> ETH
-        const _amountIn = ethers.parseEther("0.1");
+        const _zeroForOne = false; //true for ETH -> LIM, false for LIM -> ETH
+        const _amountIn = ethers.parseEther("20000");
 
         const poolKey = {
             currency0: ethers.ZeroAddress,
@@ -37,7 +37,7 @@ async function execute() {
         };
         
         if(_zeroForOne == false){
-            await LiminalToken.connect(user).approve(V4_SWAP_HELPER, _amountIn);
+            await sendTx(LiminalToken.connect(user).approve(V4_SWAP_HELPER, _amountIn), `Approve ${_amountIn} tokens`);
             //console.log("✅ SWAP HELPER: Approved LIM tokens swap helper!");
         }
     

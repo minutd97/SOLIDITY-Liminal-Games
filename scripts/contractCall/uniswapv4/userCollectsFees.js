@@ -25,7 +25,7 @@ async function execute() {
         const V4PoolHelper = await ethers.getContractAt("V4PoolHelper", V4_POOL_HELPER, user);
         
         // WE NEED TO KNOW THE POOL TOKEN ID!!!!
-        const tokenId = 0;
+        const tokenId = 32;
 
         // 1) Instantiate PositionManager and Permit2 contracts connected to the user
         const positionManager = new ethers.Contract(POSITION_MANAGER, POSITION_MANAGER_ABI, user);

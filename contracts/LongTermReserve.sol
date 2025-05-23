@@ -39,6 +39,8 @@ contract LongTermReserve is Ownable {
         uint256 cliffTime,
         uint256 vestingTime
     ) Ownable(msg.sender) {
+        require(limToken != address(0), "Invalid LIM address");
+        require(initialController != address(0), "Invalid controller address");
         LIM = IERC20(limToken);
         controller = initialController;
 

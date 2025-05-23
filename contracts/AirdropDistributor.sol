@@ -41,6 +41,7 @@ contract AirdropDistributor is Ownable, ReentrancyGuard {
 
     /// @notice Owner can assign “claimable” balances as tokens unlock
     function setClaimable(address user, uint256 amount) external onlyOwner {
+        require(user != address(0), "Invalid address");
         uint256 previous = claimable[user];
         uint256 unlocked  = getUnlockedReserves();
 

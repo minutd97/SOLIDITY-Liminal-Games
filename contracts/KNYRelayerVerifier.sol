@@ -23,6 +23,7 @@ contract KNYRelayerVerifier {
     }
 
     constructor(address _trustedRelayer) {
+        require(_trustedRelayer != address(0), "Invalid trusted relayer address");
         trustedRelayer = _trustedRelayer;
     }
 
@@ -53,6 +54,7 @@ contract KNYRelayerVerifier {
     }
 
     function setTrustedRelayer(address newTrustedRelayer) external onlyRelayer {
+        require(newTrustedRelayer != address(0), "Invalid trusted relayer address");
         trustedRelayer = newTrustedRelayer;
     }
 }

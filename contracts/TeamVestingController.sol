@@ -66,11 +66,15 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
     }
 
     function setVaultAddress(address _vault) external onlyOwner {
+        require(_vault != address(0), "Invalid valut address");
         vaultAddress = _vault;
     }
 
     /// @notice Transfers ERC20 tokens from the caller to the beneficiary's vesting wallet.
     function fundERC20ToWallet(address beneficiary, address token, uint256 amount) external onlyRole(WALLET_FUNDER_ROLE) {
+        require(token != address(0), "Invalid token");
+        require(amount > 0, "Amount must be greater than 0");
+        
         VestingInfo storage info = vestingWallets[beneficiary];
         require(info.wallet != address(0), "Wallet not found");
         require(!info.funded, "Wallet already funded");
@@ -85,6 +89,7 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
 
     /// @notice Sends native ETH to the beneficiary's vesting wallet.
     function fundETHToWallet(address beneficiary) external payable onlyRole(WALLET_FUNDER_ROLE) {
+        require(msg.value > 0, "Value must be greater than 0");
         VestingInfo storage info = vestingWallets[beneficiary];
         require(info.wallet != address(0), "Wallet not found");
         require(!info.funded, "Wallet already funded");
@@ -120,6 +125,7 @@ contract TeamVestingController is Ownable, AccessControl, ReentrancyGuard {
 
     /// @notice Transfers remaining unvested ERC20 tokens from the revoked vesting wallet to the vault.
     function reclaimUnvestedERC20(address beneficiary, address token) external onlyOwner {
+        require(token != address(0), "Invalid token");
         address wallet = vestingWallets[beneficiary].wallet;
         require(wallet != address(0), "Wallet not found");
         TeamVestingWallet(payable(wallet)).fundVaultWithLeftoverERC20(token);

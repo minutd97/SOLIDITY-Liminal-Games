@@ -33,6 +33,7 @@ contract GameTreasury is Ownable, AccessControl {
 
     constructor(address _limToken, uint256 _totalAllocation, uint256 _upfrontUnlocked, uint256 _vestingDuration) Ownable(msg.sender) {
         require(_limToken != address(0), "Invalid token");
+        require(_totalAllocation > 0, "Total alocation must be greater than zero");
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         limToken = IERC20(_limToken);
         totalAllocation = _totalAllocation;
@@ -54,6 +55,8 @@ contract GameTreasury is Ownable, AccessControl {
 
     /// @notice Transfer tokens to an address using gameFeeFunds first, then vested tokens
     function transferTokens(address to, uint256 amount) external onlyOwner {
+        require(to != address(0), "Invalid address");
+        require(amount > 0, "Amount must be greater than zero");
         uint256 usedGameFee = 0;
         uint256 usedReserve = 0;
 
@@ -93,6 +96,7 @@ contract GameTreasury is Ownable, AccessControl {
 
     /// @notice Track token fees into liquidity pool and transfer tokens to this contract
     function addLiquidityFee(address tokenAddress, uint256 amount) external onlyRole(GAME_CONTRACT_ROLE) {
+        require(tokenAddress != address(0), "Invalid token address");
         require(amount > 0, "Amount must be > 0");
         IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), amount);
         liquidityPoolFees[tokenAddress] += amount;
@@ -101,6 +105,7 @@ contract GameTreasury is Ownable, AccessControl {
 
     /// @notice Track token fees into game treasury and transfer tokens to this contract
     function addGameFee(address tokenAddress, uint256 amount) external onlyRole(GAME_CONTRACT_ROLE) {
+        require(tokenAddress != address(0), "Invalid token address");
         require(amount > 0, "Amount must be > 0");
         IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), amount);
         gameTreasuryFees[tokenAddress] += amount;
@@ -110,6 +115,8 @@ contract GameTreasury is Ownable, AccessControl {
     /// @notice Collect accumulated game fees to an address.
     /// These fees will be converted to LIM tokens and added to the gameFeeFund for future use.
     function collectGameFees(address tokenAddress, address to) external onlyOwner {
+        require(tokenAddress != address(0), "Invalid token address");
+        require(to != address(0), "Invalid address");
         uint256 amount = gameTreasuryFees[tokenAddress];
         require(amount > 0, "No game fees");
         gameTreasuryFees[tokenAddress] = 0;
@@ -120,6 +127,8 @@ contract GameTreasury is Ownable, AccessControl {
     /// @notice Collect accumulated liquidity fees to an address.
     /// These fees will be converted to ETH and LIM, then added to the protocol’s Uniswap V4 liquidity pool.
     function collectLiquidityFees(address tokenAddress, address to) external onlyOwner {
+        require(tokenAddress != address(0), "Invalid token address");
+        require(to != address(0), "Invalid address");
         uint256 amount = liquidityPoolFees[tokenAddress];
         require(amount > 0, "No liquidity fees");
         liquidityPoolFees[tokenAddress] = 0;

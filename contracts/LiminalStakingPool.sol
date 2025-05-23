@@ -78,6 +78,7 @@ contract LiminalStakingPool is Ownable, AccessControl, ReentrancyGuard {
 
     /// @notice Unstake tokens and claim rewards
     function unstake(uint256 amount) external nonReentrant {
+        require(amount > 0, "Amount must be greater than 0");
         StakeInfo storage s = stakes[msg.sender];
         require(amount > 0 && s.amount >= amount, "Invalid unstake");
 

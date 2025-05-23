@@ -63,6 +63,11 @@ contract V4PoolHelper is IERC721Receiver, Ownable, AccessControl {
 
     /// @notice Initializes the helper with references to PoolManager, PositionManager, Permit2, and Hook
     constructor(address _poolManager, address _positionManager, address _permit2, address _hookAddress) Ownable(msg.sender) {
+        require(_poolManager != address(0), "Invalid pool manager address");
+        require(_positionManager != address(0), "Invalid position manager address");
+        require(_permit2 != address(0), "Invalid permit2 address");
+        require(_hookAddress != address(0), "Invalid hook address");
+
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         poolManager = IPoolManager(_poolManager);
         positionManager = IPositionManager(_positionManager);

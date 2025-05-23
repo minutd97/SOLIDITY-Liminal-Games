@@ -50,21 +50,25 @@ contract LiminalDistributor is Ownable {
 
     /// @notice Sets the Game Treasury contract address
     function setGameTreasury(address _addr) external onlyOwner {
+        require(_addr != address(0), "Invalid game treasury address");
         gameTreasury = _addr;
     }
 
     /// @notice Sets the Liminal Staking Rewards contract address
     function setLiminalStaking(address _addr) external onlyOwner {
+        require(_addr != address(0), "Invalid lim staking address");
         liminalStaking = _addr;
     }
 
     /// @notice Sets the LP Staking Rewards contract address
     function setLPStaking(address _addr) external onlyOwner {
+        require(_addr != address(0), "Invalid lp staking address");
         lpStaking = _addr;
     }
 
     /// @notice Sets the Governance contract address
     function setLimGovernor(address _addr) external onlyOwner {
+        require(_addr != address(0), "Invalid lim governor address");
         limGovernor = _addr;
     }
 
@@ -93,6 +97,7 @@ contract LiminalDistributor is Ownable {
     /// @param amount The amount of LIM tokens allocated
     function _distribute(address target, uint256 amount) internal {
         require(target != address(0), "Target not set");
+        require(amount > 0, "Amount must be greater than 0");
         require(!distributed[target], "Already distributed");
 
         distributed[target] = true;

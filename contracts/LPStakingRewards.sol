@@ -53,6 +53,7 @@ contract LPStakingRewards is Ownable, IERC721Receiver, AccessControl, Reentrancy
     /// @notice Initializes the staking contract with LIM token and Uniswap V4 position manager
     constructor(address _limToken, address _positionManager) Ownable(msg.sender) {
         require(_limToken != address(0), "Invalid token");
+        require(_positionManager != address(0), "Invalid position manager address");
         limToken = ILiminalToken(_limToken);
         positionManager = IPositionManager(_positionManager);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);

@@ -29,6 +29,10 @@ contract V4SwapHelper is Ownable, ReentrancyGuard {
 
     /// @notice Sets the router, poolManager, and permit2 addresses for interacting with Uniswap V4
     constructor(address _router, address _poolManager, address _permit2) Ownable(msg.sender) {
+        require(_router != address(0), "Invalid router address");
+        require(_poolManager != address(0), "Invalid pool manager address");
+        require(_permit2 != address(0), "Invalid permit2 address");
+
         router = IUniversalRouter(_router);
         poolManager = IPoolManager(_poolManager);
         permit2 = IPermit2(_permit2);

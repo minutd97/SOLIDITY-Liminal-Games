@@ -66,6 +66,9 @@ contract LiminalPresale is Ownable, ReentrancyGuard {
     /// @param _limToken The address of the LIM token contract
     /// @param _v4PoolHelper The address of the Uniswap V4 pool helper contract
     constructor(address _limToken, address _v4PoolHelper, uint256 _minEthRequiered) Ownable(msg.sender) {
+        require(_limToken != address(0), "Invalid LIM address");
+        require(_v4PoolHelper != address(0), "Invalid V4 pool helper address");
+        require(_minEthRequiered > 0, "Invalid requiered ETH amount");
         limToken = LiminalToken(_limToken);
         v4PoolHelper = _v4PoolHelper;
         MIN_ETH_REQUIERED = _minEthRequiered;
@@ -107,6 +110,7 @@ contract LiminalPresale is Ownable, ReentrancyGuard {
 
     /// @notice Distributes presale tokens to contributors in batches
     function distributeTokens(uint256 batchCount) external onlyOwner {
+        require(batchCount > 0, "Batch count must be greater than 0");
         require(presaleEnded, "Presale not ended");
         require(minCapReached(), "Min cap not reached");
 
@@ -130,6 +134,7 @@ contract LiminalPresale is Ownable, ReentrancyGuard {
 
     /// @notice Refunds ETH to contributors if minimum cap was not reached
     function refundUsers(uint256 batchCount) external onlyOwner {
+        require(batchCount > 0, "Batch count must be greater than 0");
         require(presaleEnded && !minCapReached(), "Refund not allowed");
 
         uint256 remaining = buyers.length - processedBuyersCount;
@@ -148,6 +153,8 @@ contract LiminalPresale is Ownable, ReentrancyGuard {
 
     /// @notice Creates the Uniswap V4 pool and adds liquidity using ETH and LIM tokens
     function createUniswapV4Pool(uint256 _centerETH, int24 _rangeSize) external onlyOwner {
+        require(_centerETH > 0, "Invalid center ETH");
+        require(_rangeSize > 0, "Invalid range size");
         require(tokensDistributed, "Tokens are not distributed");
         IV4PoolHelper(v4PoolHelper).setupPermit2Approvals(address(0), address(limToken));
         limToken.transfer(v4PoolHelper, totalPoolTokens);

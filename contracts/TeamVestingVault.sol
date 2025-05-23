@@ -69,8 +69,6 @@ contract TeamVestingVault is Ownable {
 
     /// @notice Sends a specified amount of ERC20 tokens to the vesting controller for a given beneficiary, respecting release rate.
     function releaseTokensTo(address beneficiary, address token, uint256 amount) external onlyOwner {
-        require(token != address(0), "Invalid token");
-
         uint256 releasable = releasableTokenAmount(token);
         require(amount <= releasable, "Amount exceeds releasable");
 

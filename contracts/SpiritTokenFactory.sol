@@ -60,6 +60,7 @@ contract SpiritTokenFactory is Ownable, ReentrancyGuard {
         require(_limToken != address(0), "Invalid LIM token");
         require(_v4Hook != address(0), "Invalid hook");
         require(_v4PoolId != bytes32(0), "Invalid poolId");
+        require(_ethUsdFeed != address(0), "Invalid ETH/USD feed");
 
         spirit = SpiritToken(_spiritToken);
         limToken = IERC20(_limToken);

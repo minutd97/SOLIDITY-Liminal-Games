@@ -18,7 +18,7 @@ async function execute() {
         const user = new ethers.Wallet(process.env.TESTNET_USER_PRIVATE_KEY, provider);
         const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, user);
 
-        const ethValue = ethers.parseEther("0.5");
+        const ethValue = ethers.parseEther("0.2");
         await sendTx(LiminalPresale.connect(user).contribute({ value: ethValue }), `Contribute ${ethValue} ETH to presale`);
 
         console.log("✅ Execution Succeded !");

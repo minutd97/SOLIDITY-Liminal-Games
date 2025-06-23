@@ -21,7 +21,7 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: FORK_MAINNET ? process.env.BASE_MAINNET_PROV : process.env.BASE_MAINNET_PROV,
+        url: FORK_MAINNET ? process.env.BASE_MAINNET_PROV : process.env.BASE_TESTNET_PROV,
         //blockNumber: 321922670,
       },
       chainId: 31337,

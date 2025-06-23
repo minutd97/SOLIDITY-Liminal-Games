@@ -23,6 +23,8 @@ npx hardhat run scripts/deploy/limGovernorDeploy.js --network arbitrumSepolia
 #########
 
 # Contract calls
+npx hardhat run scripts/contractCall/fundOwnerOnFork.js --network localhost
+
 npx hardhat run scripts/contractCall/transferToken.js --network localhost
 npx hardhat run scripts/contractCall/transferToken.js --network arbitrumSepolia
 

@@ -28,8 +28,8 @@ contract LiminalPresale is Ownable, ReentrancyGuard {
     address public immutable v4PoolHelper; // Address of the Uniswap V4 pool helper contract
     
     uint256 public immutable MIN_ETH_REQUIERED; // Minimum ETH required for presale to be valid
-    uint256 public constant WALLET_MAX_CONTRIBUTION = 0.5 ether; // Maximum ETH a single wallet can contribute
-    uint256 public constant WALLET_MIN_CONTRIBUTION = 0.02 ether; // Minimum ETH a single wallet must contribute
+    uint256 public constant WALLET_MAX_CONTRIBUTION = 0.2 ether; // Maximum ETH a single wallet can contribute
+    uint256 public constant WALLET_MIN_CONTRIBUTION = 0.002 ether; // Minimum ETH a single wallet must contribute
 
     uint256 public startTime; // Timestamp when the presale starts
     uint256 public endTime; // Timestamp when the presale ends

@@ -21,7 +21,7 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: FORK_MAINNET ? process.env.ARBITRUM_MAINNET_PROV : process.env.ARBITRUM_TESTNET_PROV,
+        url: FORK_MAINNET ? process.env.BASE_MAINNET_PROV : process.env.BASE_MAINNET_PROV,
         //blockNumber: 321922670,
       },
       chainId: 31337,
@@ -34,7 +34,7 @@ module.exports = {
       url: "http://127.0.0.1:8545",
       chainId: 31337,
       forking: {
-        url: FORK_MAINNET ? process.env.ARBITRUM_MAINNET_PROV : process.env.ARBITRUM_TESTNET_PROV,
+        url: FORK_MAINNET ? process.env.BASE_MAINNET_PROV : process.env.BASE_TESTNET_PROV,
         // blockNumber: 321922670
       },
       mining: {
@@ -50,11 +50,21 @@ module.exports = {
       url: process.env.ARBITRUM_TESTNET_PROV,
       accounts: [`0x${process.env.TESTNET_PRIVATE_KEY}`],
     },
+    base: {
+      url: process.env.BASE_MAINNET_PROV,
+      accounts: [`0x${process.env.MAINNET_PRIVATE_KEY}`],
+    },
+    baseSepolia: {
+      url: process.env.BASE_TESTNET_PROV,
+      accounts: [`0x${process.env.TESTNET_PRIVATE_KEY}`],
+    },
   },
   etherscan: {
     apiKey: {
       arbitrumOne: process.env.ARBISCAN_MAINNET_API_KEY,
       arbitrumSepolia: process.env.ARBISCAN_TESTNET_API_KEY,
+      base: process.env.BASESCAN_API_KEY,
+      baseSepolia: process.env.BASESCAN_API_KEY,
     },
   },
   gasReporter: {

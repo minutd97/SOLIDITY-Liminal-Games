@@ -18,7 +18,7 @@ async function execute() {
         const owner = new ethers.Wallet(getOwner(), provider);
         const LiminalPresale = await ethers.getContractAt("LiminalPresale", LIMINAL_PRESALE, owner);
 
-        const timeToAdd = 5 * 60; // 5 minutes
+        const timeToAdd = 50 * 60; // 5 minutes
         await sendTx(LiminalPresale.connect(owner).extendEndTime(timeToAdd), `Extend time with ${timeToAdd} seconds`);
 
         console.log("✅ Execution Succeded !");

@@ -43,7 +43,7 @@ async function deploy() {
         await sendTx(swapHelper.connect(owner).approveTokenWithPermit2(limToken.target), "Approve token with permit2 to swap helper");
 
         // Deploy LiminalPresale
-        const minEthRequiered = ethers.parseEther("0.5");
+        const minEthRequiered = ethers.parseEther("0.2");
         const presale = await deployContract("LiminalPresale", owner, [limToken.target, poolHelper.target, minEthRequiered]);
         // Let the presale contract be the pool creator
         await sendTx(poolHelper.connect(owner).grantCreatorRole(presale.target), "Grant pool creator role for presale contract");

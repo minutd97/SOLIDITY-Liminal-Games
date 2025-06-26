@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 //import "hardhat/console.sol";
 
 interface IKNYRelayerVerifier {
     function getDecryptedNumbers(uint gameId, uint roundId) external view returns (uint[] memory);
 }
 
-contract KaijiNoYurei {
+contract KaijiNoYurei is Ownable, ReentrancyGuard {
     uint constant PLAYER_LIMIT = 5;
     uint constant START_POINTS = 10;
     uint constant ROUND_TIME = 30 seconds;
@@ -50,7 +52,7 @@ contract KaijiNoYurei {
     event GameWon(uint gameId, address player);
     event GameClear(uint gameId);
 
-    constructor(address _relayerVerifier) {
+    constructor(address _relayerVerifier) Ownable(msg.sender) {
         relayerVerifier = _relayerVerifier;
         createNewGame();
     }
@@ -71,7 +73,7 @@ contract KaijiNoYurei {
     }
 
     // !!!!!!!!!!! SA DAM APPROVE LA NR MAXIM DE SPIRIT TOKEN INCA DIN DEPLOY CA SA SALVAM GAZ
-    function joinGame() external {
+    function joinGame() external nonReentrant {
         uint gameId = getAvailableGame();
         require(playerGameCount[msg.sender] < MAX_GAMES_PER_PLAYER, "The maximum game participation limit per player has been reached. Please wait for at least one of the five ongoing games to conclude before attempting to join another.");
         require(games[gameId].players[msg.sender].points == 0, "Player already joined");
@@ -83,7 +85,7 @@ contract KaijiNoYurei {
         emit PlayerJoinedGame(gameId, msg.sender, games[gameId].playerAddresses.length);
     }
 
-    function startGame(uint gameId) external {
+    function startGame(uint gameId) external onlyOwner {
         require(!games[gameId].active, "Game already active");
         require(games[gameId].playerAddresses.length == PLAYER_LIMIT, "Not enough players to start");
 
@@ -94,7 +96,7 @@ contract KaijiNoYurei {
         createNewGame(); // Prepare the next available game
     }
 
-    function startRound(uint gameId) public onlyActiveGame(gameId) {
+    function startRound(uint gameId) public onlyOwner onlyActiveGame(gameId) {
         require(games[gameId].roundStartTime == 0, "Previous round not over");
     
         for (uint i = 0; i < games[gameId].playerAddresses.length; i++) {
@@ -109,7 +111,7 @@ contract KaijiNoYurei {
         emit RoundStarted(gameId, games[gameId].roundId, block.timestamp + ROUND_TIME);
     }
 
-    function selectNumber(uint gameId, string memory encryptedNumber) external onlyActiveGame(gameId) {
+    function selectNumber(uint gameId, string memory encryptedNumber) external nonReentrant onlyActiveGame(gameId) {
         Player storage player = games[gameId].players[msg.sender];
         require(player.points > 0, "Player is eliminated");
         require(!player.hasSelectedNumber, "Number already selected");
@@ -121,7 +123,7 @@ contract KaijiNoYurei {
         emit PlayerSelectedNumber(gameId, msg.sender);
     }
 
-    function processRound(uint gameId) external onlyActiveGame(gameId) {
+    function processRound(uint gameId) external onlyOwner onlyActiveGame(gameId) {
         require(block.timestamp > games[gameId].roundStartTime + ROUND_TIME, "Round time not over");
 
         setNumbersToPlayers(gameId);

@@ -1,5 +1,6 @@
-# Development
+#### Development ####
 $env:REPORT_GAS="true"; npx hardhat test test/GameTreasury.js
+$env:REPORT_GAS="true"; npx hardhat test test/KNY/GAME_KaijiNoYurei.js
 
 # Testnet commands
 # Deployment

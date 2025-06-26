@@ -11,10 +11,10 @@ async function deploy() {
         console.log(`✅ KNYRelayerVerifier deployed at: ${await knyRelayerVerifier.getAddress()}`);
 
         // Deploy KNYBet
-        const KNYBet = await ethers.getContractFactory("KNYBet", owner);
-        const knyBet = await KNYBet.deploy();
-        await knyBet.waitForDeployment();
-        console.log(`✅ KNYBet deployed at: ${await knyBet.getAddress()}`);
+        // const KNYBet = await ethers.getContractFactory("KNYBet", owner);
+        // const knyBet = await KNYBet.deploy();
+        // await knyBet.waitForDeployment();
+        // console.log(`✅ KNYBet deployed at: ${await knyBet.getAddress()}`);
 
         // Deploy KaijiNoYurei
         const KaijiNoYurei = await ethers.getContractFactory("KaijiNoYurei", owner);
@@ -23,8 +23,8 @@ async function deploy() {
         console.log(`✅ KaijiNoYurei deployed at: ${await kaijiNoYurei.getAddress()}`);
 
         // Grant access to KaijiNoYurei contract
-        await knyBet.grantManageRole(await kaijiNoYurei.getAddress());
-        console.log(`✅ Granted access to KaijiNoYurei contract`);
+        // await knyBet.grantManageRole(await kaijiNoYurei.getAddress());
+        // console.log(`✅ Granted access to KaijiNoYurei contract`);
 
         process.exit(0); // Ensure clean exit
     } catch (error) {

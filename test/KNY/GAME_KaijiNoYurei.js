@@ -3,21 +3,17 @@ const { time } = require("@nomicfoundation/hardhat-network-helpers");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const EthCrypto = require("eth-crypto");
-const axios = require("axios");
+const { decryptNumbers } = require("./decryptionModule");
 require("dotenv").config();
-
-const RELAYER_API_URL = "http://localhost:3000/decrypt"; // Adjust if deployed remotely
 
 describe("Liminal Test Contracts: KaijiNoYurei", function () {
   
-  let tokenLIM, linimalTreasury, kaijiNoYurei, knyRelayerVerifier;
+  let kaijiNoYurei, knyRelayerVerifier;
   let roundID = 0;
 
   async function deployContractsFixture() {
     const [owner, trustedRelayer, user1, user2, user3, user4, user5, user6] = await ethers.getSigners();
     
-    tokenLIM = await deployContract("LiminalToken", owner, []);
-    linimalTreasury = await deployContract("LiminalTreasury", owner, []);
     knyRelayerVerifier = await deployContract("KNYRelayerVerifier", owner, [trustedRelayer.address]);
     kaijiNoYurei = await deployContract("KaijiNoYurei", owner, [knyRelayerVerifier.getAddress()]);
     return { owner, trustedRelayer, user1, user2, user3, user4, user5, user6 };
@@ -101,64 +97,33 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
     });
   });
 
-  async function simulateSelection(currentGameID, userNumbers, users, owner, trustedRelayer){
-
+  async function simulateSelection(gameId, userNumbers, users, owner, trustedRelayer) {
     roundID++;
+    let encryptedNumbers = [];
 
-    var encryptedNumbers = [];
+    for (let i = 0; i < userNumbers.length; i++) {
+      if (userNumbers[i] === -1) {
+        encryptedNumbers.push("");
+      } else {
+        const enc = await encryptNumber(userNumbers[i]);
+        encryptedNumbers.push(enc);
+        await kaijiNoYurei.connect(users[i]).selectNumber(gameId, enc);
+      }
+    }
 
-    encryptedNumbers.push(await returnEncryptedNumber(userNumbers[0]));
-    encryptedNumbers.push(await returnEncryptedNumber(userNumbers[1]));
-    encryptedNumbers.push(await returnEncryptedNumber(userNumbers[2]));
-    encryptedNumbers.push(await returnEncryptedNumber(userNumbers[3]));
-    encryptedNumbers.push(await returnEncryptedNumber(userNumbers[4]));
+    await time.increase(180);
+    await ethers.provider.send("evm_mine");
 
-    if(userNumbers[0] != -1)
-      await kaijiNoYurei.connect(users[0]).selectNumber(currentGameID, encryptedNumbers[0]);
-    
-    if(userNumbers[1] != -1)
-      await kaijiNoYurei.connect(users[1]).selectNumber(currentGameID, encryptedNumbers[1]);
-    
-    if(userNumbers[2] != -1)
-      await kaijiNoYurei.connect(users[2]).selectNumber(currentGameID, encryptedNumbers[2]);
-    
-    if(userNumbers[3] != -1)
-      await kaijiNoYurei.connect(users[3]).selectNumber(currentGameID, encryptedNumbers[3]);
-    
-    if(userNumbers[4] != -1)
-      await kaijiNoYurei.connect(users[4]).selectNumber(currentGameID, encryptedNumbers[4]);
+    const { decryptedNumbers, signature } = await decryptNumbers(gameId, roundID, encryptedNumbers);
 
-    await increaseTime(180);
-
-    encryptedNumbers = await fetchEncryptedNumbers(currentGameID);
-    const {gameId, roundId, decryptedNumbers, signature } = await requestDecryption(currentGameID, roundID, encryptedNumbers);  
-    await submitToRelayerContract(trustedRelayer, gameId, roundId, decryptedNumbers, signature);
-
-    await kaijiNoYurei.connect(owner).processRound(currentGameID);
+    await submitDecryptedNumbers(trustedRelayer, gameId, roundID, decryptedNumbers, signature);
+    await kaijiNoYurei.connect(owner).processRound(gameId);
   }
 
-  async function returnEncryptedNumber(number) {
-
-      const publicKey = EthCrypto.publicKeyByPrivateKey(
-          process.env.HARDHAT_RELAYER_PRIVATE_KEY
-      );
-
-      // Encrypt the number using the uncompressed public key
-      const encrypted = await EthCrypto.encryptWithPublicKey(
-          publicKey,
-          JSON.stringify(number)
-      );
-  
-      // Convert encrypted object to string
-      const encryptedStringified =
-        encrypted.iv + ":" +
-        encrypted.ephemPublicKey + ":" +
-        encrypted.ciphertext + ":" +
-        encrypted.mac;
-
-      //console.log("Encrypted :", encrypted.iv, encrypted.ephemPublicKey, encrypted.ciphertext, encrypted.mac);
-      //console.log("Encrypted stringified for number ", number,": ", encryptedStringified);
-      return encryptedStringified;
+  async function encryptNumber(number) {
+    const publicKey = EthCrypto.publicKeyByPrivateKey(process.env.HARDHAT_RELAYER_PRIVATE_KEY);
+    const encrypted = await EthCrypto.encryptWithPublicKey(publicKey, JSON.stringify(number));
+    return `${encrypted.iv}:${encrypted.ephemPublicKey}:${encrypted.ciphertext}:${encrypted.mac}`;
   }
 
   async function fetchEncryptedNumbers(gameId) {
@@ -172,29 +137,7 @@ describe("Liminal Test Contracts: KaijiNoYurei", function () {
       }
   }
 
-  async function requestDecryption(gameId, roundId, encryptedNumbers) {
-      try {
-          const response = await axios.post(RELAYER_API_URL, {
-              gameId,
-              roundId,
-              encryptedDataArray: encryptedNumbers
-          });
-
-          console.log("📩 API Response:", response.data);
-
-          return {
-              gameId: response.data.gameId,
-              roundId: response.data.roundId,
-              decryptedNumbers: response.data.decryptedNumbers,
-              signature: response.data.signature
-          };
-      } catch (error) {
-          console.error("❌ API Request Failed:", error.message);
-          throw error;
-      }
-  }
- 
-  async function submitToRelayerContract(signer, gameId, roundId, decryptedNumbers, signature) {
+  async function submitDecryptedNumbers(signer, gameId, roundId, decryptedNumbers, signature) {
       try {
           const tx = await knyRelayerVerifier.connect(signer).submitDecryptedNumbers(gameId, roundId, decryptedNumbers, signature);
           await tx.wait();

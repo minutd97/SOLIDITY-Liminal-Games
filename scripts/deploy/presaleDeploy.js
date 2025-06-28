@@ -122,7 +122,7 @@ async function deploy() {
         const secondsInYear = 365 * 24 * 60 * 60;
         const vault_ratePerSecond = vesting_vault_reserve / BigInt(secondsInYear); // 30M tokens over 365 days (18 decimals)
         await sendTx(vestingVault.connect(owner).setERC20ReleaseRate(limToken.target, vault_ratePerSecond, vesting_vault_reserve_upfront),
-         `Set the ERC20 release rate for ${limToken.target}`);
+         `Set the ERC20 release rate for ${limToken.target}`);s
 
         const totalVaultReserves = vesting_vault_reserve + vesting_vault_reserve_upfront;
         await sendTx(limToken.approve(vestingVault.target, totalVaultReserves), `Approve ${ethers.formatEther(totalVaultReserves)} LIM tokens to TeamVestingVault`);

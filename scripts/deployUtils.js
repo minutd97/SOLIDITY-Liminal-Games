@@ -61,7 +61,7 @@ async function verifyContract(address, constructorArgs = [], contractPath = unde
             constructorArguments: constructorArgs,
             contract: contractPath, // Optional: e.g., "contracts/MyToken.sol:MyToken" if you're using custom subfolder structures
         });
-        console.log("✅ Verified on Arbiscan");
+        console.log("✅ Verified on Basescan");
     } catch (err) {
         const msg = err.message || "";
         if (

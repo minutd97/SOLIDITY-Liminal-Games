@@ -1,15 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 //import "hardhat/console.sol";
+
+interface IGameTreasury {
+    function addGameFee(address token, uint256 amount) external;
+    function addLiquidityFee(address token, uint256 amount) external;
+}
 
 interface IKNYRelayerVerifier {
     function getDecryptedNumbers(uint gameId, uint roundId) external view returns (uint[] memory);
 }
 
 contract KaijiNoYurei is Ownable, ReentrancyGuard {
+    IERC20 public immutable spiritToken;
+    address public immutable gameTreasury;
+    address public immutable relayerVerifier;
+    
     uint constant PLAYER_LIMIT = 5;
     uint constant START_POINTS = 10;
     uint constant ROUND_TIME = 30 seconds;
@@ -39,7 +49,12 @@ contract KaijiNoYurei is Ownable, ReentrancyGuard {
     // Tracks number of active games per player
     mapping(address => uint8) public playerGameCount;
 
-    address public immutable relayerVerifier;
+    // Fees in basis points (e.g. 150 = 1.5%, 500 = 5%)
+    uint256 public gameFeeBps = 150;
+    uint256 public liquidityFeeBps = 500;
+
+    // Entry fee (can be adjusted in future)
+    uint256 public spiritEntryFee = 100 * 1e18;
 
     event GameCreated(uint gameId);
     event GameStarted(uint gameId);
@@ -52,8 +67,10 @@ contract KaijiNoYurei is Ownable, ReentrancyGuard {
     event GameWon(uint gameId, address player);
     event GameClear(uint gameId);
 
-    constructor(address _relayerVerifier) Ownable(msg.sender) {
+    constructor(address _relayerVerifier, address _spiritToken, address _gameTreasury) Ownable(msg.sender) {
         relayerVerifier = _relayerVerifier;
+        spiritToken = IERC20(_spiritToken);
+        gameTreasury = _gameTreasury;
         createNewGame();
     }
 
@@ -64,6 +81,20 @@ contract KaijiNoYurei is Ownable, ReentrancyGuard {
     modifier onlyActiveGame(uint gameId) {
         require(games[gameId].active, "No active game");
         _;
+    }
+
+    function setSpiritEntryFee(uint256 fee) external onlyOwner {
+        spiritEntryFee = fee;
+    }
+
+    function setGameFeeBps(uint256 bps) external onlyOwner {
+        require(bps <= 1000, "Too high"); // Max 10%
+        gameFeeBps = bps;
+    }
+
+    function setLiquidityFeeBps(uint256 bps) external onlyOwner {
+        require(bps <= 1000, "Too high"); // Max 10%
+        liquidityFeeBps = bps;
     }
 
     function createNewGame() internal {
@@ -78,6 +109,7 @@ contract KaijiNoYurei is Ownable, ReentrancyGuard {
         require(playerGameCount[msg.sender] < MAX_GAMES_PER_PLAYER, "The maximum game participation limit per player has been reached. Please wait for at least one of the five ongoing games to conclude before attempting to join another.");
         require(games[gameId].players[msg.sender].points == 0, "Player already joined");
         require(games[gameId].playerAddresses.length < PLAYER_LIMIT, "Game is full");
+        require(spiritToken.transferFrom(msg.sender, address(this), spiritEntryFee), "SPIRIT transfer failed");
         
         games[gameId].players[msg.sender] = Player(START_POINTS, false, "", 0);
         games[gameId].playerAddresses.push(msg.sender);
@@ -213,6 +245,22 @@ contract KaijiNoYurei is Ownable, ReentrancyGuard {
             startRound(gameId);
             return;
         } else if (playerCount == 1) {
+            // Winner takes the full SPIRIT pool (5 players x entry fee)
+            uint256 totalReward = PLAYER_LIMIT * spiritEntryFee;
+
+            // Calculate fees
+            uint256 gameFee = (totalReward * gameFeeBps) / 10_000;
+            uint256 liquidityFee = (totalReward * liquidityFeeBps) / 10_000;
+            uint256 remainingReward = totalReward - gameFee - liquidityFee;
+
+            // Transfer fees
+            spiritToken.approve(gameTreasury, gameFee + liquidityFee);
+            IGameTreasury(gameTreasury).addGameFee(address(spiritToken), gameFee);
+            IGameTreasury(gameTreasury).addLiquidityFee(address(spiritToken), liquidityFee);
+
+            // Send reward to the winner
+            require(spiritToken.transfer(playerWonAddress, remainingReward), "SPIRIT reward transfer failed");
+
             emit GameWon(gameId, playerWonAddress);
         } else {
             // No winners for this game

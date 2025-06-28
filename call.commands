@@ -5,176 +5,176 @@ $env:REPORT_GAS="true"; npx hardhat test test/KNY/GAME_KaijiNoYurei.js
 # Testnet commands
 # Deployment
 npx hardhat run scripts/deploy/presaleDeploy.js --network localhost
-npx hardhat run scripts/deploy/presaleDeploy.js --network arbitrumSepolia
+npx hardhat run scripts/deploy/presaleDeploy.js --network baseSepolia
 
 npx hardhat run scripts/deploy/afterPresaleDeploy.js --network localhost
-npx hardhat run scripts/deploy/afterPresaleDeploy.js --network arbitrumSepolia
+npx hardhat run scripts/deploy/afterPresaleDeploy.js --network baseSepolia
 
 npx hardhat run scripts/deploy/limStakingDeploy.js --network localhost
-npx hardhat run scripts/deploy/limStakingDeploy.js --network arbitrumSepolia
+npx hardhat run scripts/deploy/limStakingDeploy.js --network baseSepolia
 
 npx hardhat run scripts/deploy/lpStakingDeploy.js --network localhost
-npx hardhat run scripts/deploy/lpStakingDeploy.js --network arbitrumSepolia
+npx hardhat run scripts/deploy/lpStakingDeploy.js --network baseSepolia
 
 npx hardhat run scripts/deploy/knyBetDeploy.js --network localhost
-npx hardhat run scripts/deploy/knyBetDeploy.js --network arbitrumSepolia
+npx hardhat run scripts/deploy/knyBetDeploy.js --network baseSepolia
 
 npx hardhat run scripts/deploy/limGovernorDeploy.js --network localhost
-npx hardhat run scripts/deploy/limGovernorDeploy.js --network arbitrumSepolia
+npx hardhat run scripts/deploy/limGovernorDeploy.js --network baseSepolia
 #########
 
 # Contract calls
 npx hardhat run scripts/contractCall/fundOwnerOnFork.js --network localhost
 
 npx hardhat run scripts/contractCall/transferToken.js --network localhost
-npx hardhat run scripts/contractCall/transferToken.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/transferToken.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/transferETH.js --network localhost
-npx hardhat run scripts/contractCall/transferETH.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/transferETH.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/logTokenAndETHBalance.js --network localhost
-npx hardhat run scripts/contractCall/logTokenAndETHBalance.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/logTokenAndETHBalance.js --network baseSepolia
 
 # LIMINAL PRESALE
 npx hardhat run scripts/contractCall/liminalpresale/startPresale.js --network localhost
-npx hardhat run scripts/contractCall/liminalpresale/startPresale.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/liminalpresale/startPresale.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/liminalpresale/contribute.js --network localhost
-npx hardhat run scripts/contractCall/liminalpresale/contribute.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/liminalpresale/contribute.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/liminalpresale/endPresale.js --network localhost
-npx hardhat run scripts/contractCall/liminalpresale/endPresale.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/liminalpresale/endPresale.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/liminalpresale/distribute.js --network localhost
-npx hardhat run scripts/contractCall/liminalpresale/distribute.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/liminalpresale/distribute.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/liminalpresale/refund.js --network localhost
-npx hardhat run scripts/contractCall/liminalpresale/refund.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/liminalpresale/refund.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/liminalpresale/createPool.js --network localhost
-npx hardhat run scripts/contractCall/liminalpresale/createPool.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/liminalpresale/createPool.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/liminalpresale/extendTime.js --network localhost
-npx hardhat run scripts/contractCall/liminalpresale/extendTime.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/liminalpresale/extendTime.js --network baseSepolia
 #########
 
 # UNISWAP V4
 npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/ownerMintPosition.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/uniswapv4/ownerIncreaseLiquidity.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/ownerIncreaseLiquidity.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/ownerIncreaseLiquidity.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/uniswapv4/onwerCollectFees.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/onwerCollectFees.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/onwerCollectFees.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/uniswapv4/userMintPosition.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/userMintPosition.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/userMintPosition.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/uniswapv4/userIncreaseLiquidity.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/userIncreaseLiquidity.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/userIncreaseLiquidity.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/uniswapv4/userDecreaseLiquidity.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/userDecreaseLiquidity.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/userDecreaseLiquidity.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/uniswapv4/userCollectsFees.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/userCollectsFees.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/userCollectsFees.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/uniswapv4/userBurnLiquidity.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/userBurnLiquidity.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/userBurnLiquidity.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/uniswapv4/userSwap.js --network localhost
-npx hardhat run scripts/contractCall/uniswapv4/userSwap.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/uniswapv4/userSwap.js --network baseSepolia
 #########
 
 # AIRDROP
 npx hardhat run scripts/contractCall/airdrop/assignClaimable.js --network localhost
-npx hardhat run scripts/contractCall/airdrop/assignClaimable.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/airdrop/assignClaimable.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/airdrop/claimAirdrop.js --network localhost
-npx hardhat run scripts/contractCall/airdrop/claimAirdrop.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/airdrop/claimAirdrop.js --network baseSepolia
 #########
 
 # LONG TERM RESERVE
 npx hardhat run scripts/contractCall/longtermreserve/releaseLongTerm.js --network localhost
-npx hardhat run scripts/contractCall/longtermreserve/releaseLongTerm.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/longtermreserve/releaseLongTerm.js --network baseSepolia
 #########
 
 # TEAM VESTING
 npx hardhat run scripts/contractCall/teamvesting/releaseVested.js --network localhost
-npx hardhat run scripts/contractCall/teamvesting/releaseVested.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/teamvesting/releaseVested.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/teamvesting/createWallet.js --network localhost
-npx hardhat run scripts/contractCall/teamvesting/createWallet.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/teamvesting/createWallet.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/teamvesting/fundWalletFromVault.js --network localhost
-npx hardhat run scripts/contractCall/teamvesting/fundWalletFromVault.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/teamvesting/fundWalletFromVault.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/teamvesting/reclaimUnvested.js --network localhost
-npx hardhat run scripts/contractCall/teamvesting/reclaimUnvested.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/teamvesting/reclaimUnvested.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/teamvesting/revokeVesting.js --network localhost
-npx hardhat run scripts/contractCall/teamvesting/revokeVesting.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/teamvesting/revokeVesting.js --network baseSepolia
 #########
 
 # GAME TREASURY
 npx hardhat run scripts/contractCall/gametreasury/addFees.js --network localhost
-npx hardhat run scripts/contractCall/gametreasury/addFees.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/gametreasury/addFees.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/gametreasury/collectGameFees.js --network localhost
-npx hardhat run scripts/contractCall/gametreasury/collectGameFees.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/gametreasury/collectGameFees.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/gametreasury/collectLiquidityFees.js --network localhost
-npx hardhat run scripts/contractCall/gametreasury/collectLiquidityFees.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/gametreasury/collectLiquidityFees.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/gametreasury/transferTokens.js --network localhost
-npx hardhat run scripts/contractCall/gametreasury/transferTokens.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/gametreasury/transferTokens.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/gametreasury/ownerSendFees.js --network localhost
-npx hardhat run scripts/contractCall/gametreasury/ownerSendFees.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/gametreasury/ownerSendFees.js --network baseSepolia
 #########
 
 # SPIRIT TOKEN FACTORY
 npx hardhat run scripts/contractCall/spiritfactory/mintSpirit.js --network localhost
-npx hardhat run scripts/contractCall/spiritfactory/mintSpirit.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/spiritfactory/mintSpirit.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/spiritfactory/burnSpirit.js --network localhost
-npx hardhat run scripts/contractCall/spiritfactory/burnSpirit.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/spiritfactory/burnSpirit.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/spiritfactory/ownerCollectsFees.js --network localhost
-npx hardhat run scripts/contractCall/spiritfactory/ownerCollectsFees.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/spiritfactory/ownerCollectsFees.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/spiritfactory/ownerDepositReserve.js --network localhost
-npx hardhat run scripts/contractCall/spiritfactory/ownerDepositReserve.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/spiritfactory/ownerDepositReserve.js --network baseSepolia
 #########
 
 # LIMINAL STAKING POOL
 npx hardhat run scripts/contractCall/limstaking/stakeLim.js --network localhost
-npx hardhat run scripts/contractCall/limstaking/stakeLim.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/limstaking/stakeLim.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/limstaking/claimLim.js --network localhost
-npx hardhat run scripts/contractCall/limstaking/claimLim.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/limstaking/claimLim.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/limstaking/unstakeLim.js --network localhost
-npx hardhat run scripts/contractCall/limstaking/unstakeLim.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/limstaking/unstakeLim.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/limstaking/pendingRewards.js --network localhost
-npx hardhat run scripts/contractCall/limstaking/pendingRewards.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/limstaking/pendingRewards.js --network baseSepolia
 #########
 
 # LP STAKING REWARDS
 npx hardhat run scripts/contractCall/lpstaking/stakePosition.js --network localhost
-npx hardhat run scripts/contractCall/lpstaking/stakePosition.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/lpstaking/stakePosition.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/lpstaking/getPendingAndLoked.js --network localhost
-npx hardhat run scripts/contractCall/lpstaking/getPendingAndLoked.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/lpstaking/getPendingAndLoked.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/lpstaking/claimFromLp.js --network localhost
-npx hardhat run scripts/contractCall/lpstaking/claimFromLp.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/lpstaking/claimFromLp.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/lpstaking/unstakePosition.js --network localhost
-npx hardhat run scripts/contractCall/lpstaking/unstakePosition.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/lpstaking/unstakePosition.js --network baseSepolia
 
 npx hardhat run scripts/contractCall/lpstaking/ownerBurnAccumulated.js --network localhost
-npx hardhat run scripts/contractCall/lpstaking/ownerBurnAccumulated.js --network arbitrumSepolia
+npx hardhat run scripts/contractCall/lpstaking/ownerBurnAccumulated.js --network baseSepolia
 #########

@@ -20,14 +20,14 @@ module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
-      // forking: {
-      //   url: FORK_MAINNET ? process.env.BASE_MAINNET_PROV : process.env.BASE_TESTNET_PROV,
-      //   //blockNumber: 321922670,
-      // },
-      // mining: {
-      //   auto: true,
-      //   interval: [3000, 5000],
-      // },
+      forking: {
+        url: FORK_MAINNET ? process.env.BASE_MAINNET_PROV : process.env.BASE_TESTNET_PROV,
+        //blockNumber: 321922670,
+      },
+      mining: {
+        auto: true,
+        interval: [3000, 5000],
+      },
       chainId: 31337,
     },
     localhost: {

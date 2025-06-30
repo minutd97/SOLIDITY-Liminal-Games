@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const IS_MAINNET = process.env.MAINNET_DEPLOY === "true";
+const IS_MAINNET = process.env.IS_MAINNET === "true";
 const POSITION_MANAGER_ABI = [
   {
     inputs: [

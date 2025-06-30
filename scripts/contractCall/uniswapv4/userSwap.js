@@ -26,7 +26,7 @@ async function execute() {
         const V4SwapHelper = await ethers.getContractAt("V4SwapHelper", V4_SWAP_HELPER, user);
 
         const _zeroForOne = false; //true for ETH -> LIM, false for LIM -> ETH
-        const _amountIn = ethers.parseEther("20000");
+        const _amountIn = ethers.parseEther("1515");
 
         const poolKey = {
             currency0: ethers.ZeroAddress,

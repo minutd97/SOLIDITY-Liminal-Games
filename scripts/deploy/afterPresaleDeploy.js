@@ -13,7 +13,7 @@ const {
     log_EthBalance
 } = require(path.resolve(process.cwd(), "scripts/deployUtils"));
 const {LIMINAL_TOKEN, LIMINAL_TOKEN_DISTRIBUTOR, CHAINLINK_PRICE_FEED, V4_HOOK} = require(path.resolve(process.cwd(), "scripts/deployAddresses"));
-const IS_MAINNET = process.env.MAINNET_DEPLOY === "true";
+const IS_MAINNET = process.env.IS_MAINNET === "true";
 let mockPriceAddress;
 
 async function deploy() {

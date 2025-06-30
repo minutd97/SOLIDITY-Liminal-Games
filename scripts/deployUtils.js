@@ -12,7 +12,7 @@ function isLocalNetwork() {
 }
 
 function getOwner() {
-    return process.env.MAINNET_DEPLOY === "true"
+    return process.env.IS_MAINNET === "true"
         ? process.env.MAINNET_PRIVATE_KEY
         : process.env.TESTNET_PRIVATE_KEY;
 }

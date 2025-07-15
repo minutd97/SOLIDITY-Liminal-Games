@@ -23,7 +23,7 @@ async function execute() {
         const V4PoolHelper = await ethers.getContractAt("V4PoolHelper", V4_POOL_HELPER, owner);
         
         // WE NEED TO KNOW THE POOL TOKEN ID!!!!
-        const ownerTokenId = 30;
+        const ownerTokenId = 76554;
         // Get balances before
         const ethBefore = await ethers.provider.getBalance(owner.address);
         const limBefore = await LiminalToken.balanceOf(owner.address);

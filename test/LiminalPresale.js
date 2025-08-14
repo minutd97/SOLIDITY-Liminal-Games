@@ -38,7 +38,7 @@ describe("Presale contract test + V4 Pool Creation", function () {
     await poolHelper.waitForDeployment();
 
     // Deploy LiminalPresale
-    const minEthRequiered = ethers.parseEther("7");
+    const minEthRequiered = ethers.parseEther("2.5");
     const LiminalPresale = await ethers.getContractFactory("LiminalPresale");
     const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target, minEthRequiered);
     await presale.waitForDeployment();
@@ -73,7 +73,7 @@ describe("Presale contract test + V4 Pool Creation", function () {
 
     await testRemainingTime(presale, 10);
 
-    const ethValue = ethers.parseEther("0.5");
+    const ethValue = ethers.parseEther("0.2");
     await presale.connect(user1).contribute({ value: ethValue });
     await testAllowedContribution(presale, user1.address);
 
@@ -157,7 +157,7 @@ describe("Presale contract test + V4 Pool Creation", function () {
     const { owner, presale } = await loadFixture(deployFixture);
     await presale.startPresale(3600); // 1-hour presale
 
-    const ethValue = ethers.parseEther("0.5");
+    const ethValue = ethers.parseEther("0.2");
     const userCount = 14;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);

@@ -173,7 +173,7 @@ describe("Uniswap V4 Full test: Pool Creation, Swaps, Liquidity Providing and mo
     console.log(`V4SwapHelper : ${swapHelper.target}`);
 
     // Deploy LiminalPresale
-    const minEthRequiered = ethers.parseEther("7");
+    const minEthRequiered = ethers.parseEther("2.5");
     const LiminalPresale = await ethers.getContractFactory("LiminalPresale");
     const presale = await LiminalPresale.deploy(limToken.target, poolHelper.target, minEthRequiered);
     await presale.waitForDeployment();
@@ -203,7 +203,7 @@ it("should finalize and distribute tokens correctly + V4 Pool Creation + V4 Swap
     
     await presale.startPresale(3600); // 1-hour presale
 
-    const ethValue = ethers.parseEther("0.5");
+    const ethValue = ethers.parseEther("0.2");
     const userCount = 14;
     for (let i = 0; i < userCount; i++) {
         const wallet = ethers.Wallet.createRandom().connect(ethers.provider);
